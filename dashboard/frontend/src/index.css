@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/*
+  CASPER palette — pulled directly from CASPER_Architecture_Diagram.svg so
+  the dashboard reads as the same product as the diagram evaluators already
+  saw. Light theme throughout except the masthead (navy, see Masthead.jsx),
+  chosen over a dark theme for projector legibility: dark-on-dark accents
+  (steel on navy) lose separation on typical classroom projectors with
+  mediocre contrast and ambient light bleed, while a light background with
+  saturated accents stays legible regardless.
+*/
+@theme {
+  --color-bg: #f4f6fb;
+  --color-panel: #eef2f8;
+  --color-panel-raised: #ffffff;
+
+  --color-text: #3d3d42;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9aa5c0;
+
+  --color-border: #d7dee8;
+
+  --color-navy: #16213e;
+  --color-steel: #4a6fa5; /* predictive */
+  --color-amber: #f2994a; /* reactive / peak phase */
+  --color-green: #2f9e6e; /* success / after phase / module D */
+
+  --color-code-dark: #121a30;
+
+  /* Not in the architecture diagram -- the diagram has no error state.
+     Desaturated red so it doesn't clash with the diagram-derived palette. */
+  --color-danger: #d64545;
+  --color-danger-bg: #fbeaea;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
