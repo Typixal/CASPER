@@ -9,6 +9,14 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+# --- Frontend build tooling (dashboard/frontend) ---
+# node_modules is never committed -- the demo machine never runs npm, it only
+# runs `python app.py` against the committed build output in static/dist/.
+# Rebuild with: cd dashboard/frontend && npm install && npm run build:flask
+dashboard/frontend/node_modules/
+dashboard/frontend/.vite/
+npm-debug.log*
+
 # --- Runtime output, not source ---
 # Each teammate's audit log is their own; committing it would conflict on
 # every demo run. The folder itself is kept via logs/.gitkeep.
