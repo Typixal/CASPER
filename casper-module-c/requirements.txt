@@ -1,0 +1,4 @@
+# Host-side dependencies (the predictive policy runs on the laptop, not in a container).
+# The portal's own dependencies live in portal/requirements.txt and are installed
+# inside the Docker image.
+APScheduler==3.10.4

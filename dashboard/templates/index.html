@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CASPER — Live Demo Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --line: #2a3556;
+    --text: #e6edf3;
+    --muted: #8b95a5;
+    --navy: #4a6fa5;
+    --steel: #8fb6f2;
+    --amber: #f2994a;
+    --green: #2f9e6e;
+    --green-bright: #3dbe6c;
+    --red: #f2555a;
+    --yellow: #f2c94c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+  }
+  code, .mono { font-family: "Cascadia Code", "Courier New", monospace; }
+
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: 0.5px; }
+  header h1 span { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 8px; }
+  .spacer { flex: 1; }
+  .pill {
+    padding: 4px 11px; border-radius: 12px; font-size: 11.5px; font-weight: 700;
+    letter-spacing: 0.4px; border: 1px solid var(--line); color: var(--muted);
+  }
+  .pill.live { color: var(--green-bright); border-color: var(--green); }
+  .pill.dead { color: var(--red); border-color: var(--red); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background: var(--green-bright); }
+  .dot.off { background: var(--red); }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 12px;
+  }
+  button:hover { border-color: var(--steel); }
+
+  .banner {
+    margin: 14px 22px 0; padding: 12px 16px; border-radius: 8px;
+    background: rgba(242,85,90,0.12); border: 1px solid var(--red); color: #ffc9cb;
+  }
+  .banner.hidden { display: none; }
+
+  .stats { display: flex; gap: 14px; padding: 18px 22px 4px; flex-wrap: wrap; }
+  .stat {
+    flex: 1 1 160px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .stat .label { color: var(--muted); font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; }
+  .stat .value { font-size: 32px; font-weight: 700; margin-top: 4px; line-height: 1.1; }
+  .stat .sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 22px 28px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .panel h2 {
+    margin: 0; padding: 12px 16px; font-size: 12.5px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel h2 .tag {
+    font-size: 10px; padding: 2px 7px; border-radius: 9px; letter-spacing: 0.4px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  }
+  .panel .body { padding: 14px 16px; }
+  .panel.span2 { grid-column: 1 / -1; }
+  .panel.dim { opacity: 0.55; }
+
+  .replicas { display: flex; flex-wrap: wrap; gap: 10px; }
+  .replica {
+    min-width: 150px; flex: 0 1 auto; background: var(--panel-2);
+    border: 1px solid var(--line); border-left: 4px solid var(--muted);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .replica.ready { border-left-color: var(--green-bright); }
+  .replica.starting { border-left-color: var(--yellow); }
+  .replica.bad { border-left-color: var(--red); }
+  .replica .name { font-weight: 700; font-size: 13px; }
+  .replica .meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .replica .hits { color: var(--steel); font-size: 11px; margin-top: 4px; }
+  .warn { color: var(--amber); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    text-align: left; color: var(--muted); font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.6px; padding: 6px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  td { padding: 6px 8px; border-bottom: 1px solid rgba(42,53,86,0.5); }
+  tr:last-child td { border-bottom: none; }
+  .src { padding: 2px 8px; border-radius: 9px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px; }
+  .src.predictive { background: rgba(74,111,165,0.25); color: var(--steel); border: 1px solid var(--navy); }
+  .src.reactive   { background: rgba(47,158,110,0.2); color: var(--green-bright); border: 1px solid var(--green); }
+  .src.manual     { background: rgba(139,149,165,0.15); color: var(--muted); border: 1px solid var(--line); }
+
+  .timeline { position: relative; height: 10px; background: var(--panel-2); border-radius: 5px; margin: 22px 0 8px; }
+  .timeline .fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--navy), var(--amber)); border-radius: 5px; }
+  .timeline .mark { position: absolute; top: -18px; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .timeline .tick { position: absolute; top: -4px; width: 2px; height: 18px; background: var(--muted); transform: translateX(-50%); }
+  .kv { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(42,53,86,0.4); }
+  .kv:last-child { border-bottom: none; }
+  .kv .k { color: var(--muted); }
+  .phase { font-weight: 700; }
+  .phase.before { color: var(--steel); }
+  .phase.ramp, .phase.peak { color: var(--amber); }
+  .phase.after { color: var(--muted); }
+
+  .empty { color: var(--muted); font-style: italic; }
+  .notbuilt {
+    display: inline-block; padding: 3px 9px; border-radius: 9px; font-size: 11px;
+    border: 1px dashed var(--line); color: var(--muted);
+  }
+  ul.plain { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+  footer { padding: 0 22px 26px; color: var(--muted); font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CASPER <span>live demo dashboard</span></h1>
+  <span class="pill" id="entrypoint">localhost:8080</span>
+  <div class="spacer"></div>
+  <span class="pill" id="probe-pill">probe on</span>
+  <button id="probe-toggle">toggle probe</button>
+  <span class="pill live" id="conn"><span class="dot"></span>connecting…</span>
+</header>
+
+<div class="banner hidden" id="banner"></div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">Replicas ready</div>
+    <div class="value" id="s-ready">—</div>
+    <div class="sub" id="s-ready-sub">of 0 containers</div>
+  </div>
+  <div class="stat">
+    <div class="label">Routed by nginx</div>
+    <div class="value" id="s-routed">—</div>
+    <div class="sub" id="s-routed-sub">upstream servers</div>
+  </div>
+  <div class="stat">
+    <div class="label">Last scaled by</div>
+    <div class="value" id="s-source">—</div>
+    <div class="sub" id="s-source-sub">&nbsp;</div>
+  </div>
+  <div class="stat">
+    <div class="label">Probe latency</div>
+    <div class="value" id="s-latency">—</div>
+    <div class="sub" id="s-latency-sub">dashboard probe, not k6</div>
+  </div>
+  <div class="stat">
+    <div class="label">Scale actions</div>
+    <div class="value" id="s-actions">—</div>
+    <div class="sub" id="s-actions-sub">in audit log</div>
+  </div>
+</div>
+
+<div class="grid">
+
+  <div class="panel span2">
+    <h2>Portal replicas <span class="tag">module c · live from docker</span></h2>
+    <div class="body"><div class="replicas" id="replicas"><span class="empty">waiting for data…</span></div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Prediction window <span class="tag" id="pred-kind">module b contract</span></h2>
+    <div class="body" id="prediction"><span class="empty">waiting…</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>nginx upstream <span class="tag">generated config</span></h2>
+    <div class="body" id="nginx"><span class="empty">waiting…</span></div>
+  </div>
+
+  <div class="panel span2">
+    <h2>Scale action audit log <span class="tag">predicted event → planned → executed</span></h2>
+    <div class="body" id="actions"><span class="empty">waiting…</span></div>
+  </div>
+
+  <div class="panel span2">
+    <h2>Probe latency <span class="tag">dashboard's own request, 1 per refresh</span></h2>
+    <div class="body" id="latency"><span class="empty">waiting…</span></div>
+  </div>
+
+  <div class="panel" id="panel-a">
+    <h2>Module A — event dataset</h2>
+    <div class="body" id="mod-a"><span class="empty">waiting…</span></div>
+  </div>
+
+  <div class="panel" id="panel-b">
+    <h2>Module B — estimation output</h2>
+    <div class="body" id="mod-b"><span class="empty">waiting…</span></div>
+  </div>
+
+  <div class="panel span2" id="panel-d">
+    <h2>Module D — reactive baseline &amp; k6</h2>
+    <div class="body" id="mod-d"><span class="empty">waiting…</span></div>
+  </div>
+
+</div>
+
+<footer>
+  Read-only view. The dashboard never scales anything — it reads Docker state,
+  <code>nginx/nginx.conf</code>, <code>logs/scale_actions.jsonl</code> and the active Prediction.
+  <span id="updated"></span>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => (
+  {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]
+));
+
+function timeOnly(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d) ? "—" : d.toLocaleTimeString();
+}
+function countdown(seconds) {
+  if (seconds === null || seconds === undefined) return "—";
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  return m + "m " + (s % 60) + "s";
+}
+
+function renderReplicas(state) {
+  const box = $("replicas");
+  const reps = state.docker?.replicas ?? [];
+  const hits = state.probe_summary?.per_replica ?? {};
+
+  if (!state.docker?.available) {
+    box.innerHTML = '<span class="empty">Docker not reachable — is Docker Desktop running?</span>';
+    return;
+  }
+  if (!reps.length) {
+    box.innerHTML = '<span class="empty">No portal containers. Stack is down or drained to 0.</span>';
+    return;
+  }
+
+  box.innerHTML = reps.map(r => {
+    let cls = "bad";
+    if (r.ready) cls = "ready";
+    else if (r.health === "starting") cls = "starting";
+    // The portal reports HOSTNAME (its short container ID) as served_by, so
+    // match probe hits back to this container by ID prefix.
+    const hitKey = Object.keys(hits).find(k => r.id && (r.id.startsWith(k) || k.startsWith(r.id)));
+    const hitCount = hitKey ? hits[hitKey] : 0;
+    const routed = r.routed
+      ? '<span style="color:var(--green-bright)">● in nginx</span>'
+      : '<span class="warn">● not in nginx</span>';
+    return `<div class="replica ${cls}">
+      <div class="name">${esc(r.name)}</div>
+      <div class="meta">${esc(r.state)} · ${esc(r.health || "—")}</div>
+      <div class="meta">${routed}</div>
+      <div class="hits">${hitCount} probe hit${hitCount === 1 ? "" : "s"} · <span class="mono">${esc(r.id || "?")}</span></div>
+    </div>`;
+  }).join("");
+}
+
+function renderPrediction(state) {
+  const p = state.prediction ?? {};
+  const box = $("prediction");
+  $("pred-kind").textContent = p.kind ? p.kind : "module b contract";
+
+  if (!p.exists) {
+    box.innerHTML = '<span class="notbuilt">no Prediction file found</span>';
+    return;
+  }
+  if (p.error) {
+    box.innerHTML = `<span class="warn">${esc(p.error)}</span>`;
+    return;
+  }
+
+  const pct = p.progress_pct ?? 0;
+  const phaseLabel = {
+    before: "before ramp — capacity should already be provisioned",
+    ramp:   "inside the event window",
+    peak:   "past predicted peak",
+    after:  "window closed"
+  }[p.phase] ?? "";
+
+  box.innerHTML = `
+    <div class="kv"><span class="k">Event</span><span class="mono">${esc(p.event_id)}</span></div>
+    <div class="kv"><span class="k">Predicted peak</span><span><b>${esc(p.peak_replicas)}</b> replicas</span></div>
+    <div class="kv"><span class="k">Phase</span><span class="phase ${esc(p.phase)}">${esc(p.phase)}</span></div>
+    <div class="kv"><span class="k">${p.next_action ? esc(p.next_action) : "next"} in</span><span>${countdown(p.seconds_to_next)}</span></div>
+    <div class="timeline">
+      <div class="fill" style="width:${pct}%"></div>
+      <div class="tick" style="left:0%"></div><div class="mark" style="left:0%">start ${timeOnly(p.ramp_start)}</div>
+      <div class="tick" style="left:50%"></div><div class="mark" style="left:50%">peak ${timeOnly(p.ramp_peak)}</div>
+      <div class="tick" style="left:100%"></div><div class="mark" style="left:100%">end ${timeOnly(p.ramp_end)}</div>
+    </div>
+    <div class="sub" style="color:var(--muted);font-size:11.5px;margin-top:14px">
+      ${esc(phaseLabel)} · source: <code>${esc(p.file)}</code>
+    </div>`;
+}
+
+function renderNginx(state) {
+  const n = state.nginx ?? {};
+  const box = $("nginx");
+  if (!n.exists) {
+    box.innerHTML = '<span class="empty">nginx.conf not generated yet — run the controller once.</span>';
+    return;
+  }
+  const rows = (n.servers ?? []).map(s => `<div class="kv"><span class="mono">${esc(s)}</span><span style="color:var(--green-bright)">routing</span></div>`).join("");
+  box.innerHTML = `
+    ${n.drained ? '<div class="warn" style="margin-bottom:8px">Drained to zero — placeholder <code>server 127.0.0.1:1 down;</code> in upstream, nginx returns 502.</div>' : ""}
+    ${rows || '<span class="empty">no upstream servers</span>'}
+    <div class="sub" style="color:var(--muted);font-size:11.5px;margin-top:10px">
+      config last written ${timeOnly(n.modified)}
+    </div>`;
+}
+
+function renderActions(state) {
+  const log = state.scale_log ?? {};
+  const box = $("actions");
+  if (!log.exists || !(log.actions ?? []).length) {
+    box.innerHTML = '<span class="empty">No scaling actions logged yet.</span>';
+    return;
+  }
+  const rows = log.actions.map(a => {
+    const src = ["predictive","reactive","manual"].includes(a.source) ? a.source : "manual";
+    const shortfall = a.actual_healthy_replicas !== a.requested_replicas;
+    return `<tr>
+      <td class="mono">${timeOnly(a.timestamp)}</td>
+      <td><span class="src ${src}">${esc(a.source)}</span></td>
+      <td>${esc(a.requested_replicas)}</td>
+      <td class="${shortfall ? "warn" : ""}">${esc(a.actual_healthy_replicas)}</td>
+      <td class="mono" style="color:var(--muted)">${esc((a.replica_names ?? []).join(", ")) || "—"}</td>
+    </tr>`;
+  }).join("");
+  const tally = Object.entries(log.by_source ?? {})
+    .map(([k,v]) => `<span class="src ${["predictive","reactive","manual"].includes(k)?k:"manual"}">${esc(k)} ${v}</span>`)
+    .join(" ");
+  box.innerHTML = `
+    <div style="margin-bottom:10px">${tally}</div>
+    <table>
+      <thead><tr><th>Time</th><th>Source</th><th>Requested</th><th>Healthy</th><th>Replicas</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderLatency(state) {
+  const ps = state.probe_summary ?? {};
+  const box = $("latency");
+  const hist = ps.history ?? [];
+  if (!hist.length) {
+    box.innerHTML = '<span class="empty">Probe disabled or no samples yet.</span>';
+    return;
+  }
+  const W = 900, H = 120, pad = 4;
+  const vals = hist.map(h => h.ok ? h.latency_ms : null);
+  const maxV = Math.max(50, ...vals.filter(v => v !== null));
+  const step = hist.length > 1 ? (W - pad*2) / (hist.length - 1) : 0;
+
+  let d = "", started = false;
+  vals.forEach((v, i) => {
+    if (v === null) { started = false; return; }
+    const x = pad + i * step;
+    const y = H - pad - (v / maxV) * (H - pad*2);
+    d += (started ? " L" : " M") + x.toFixed(1) + "," + y.toFixed(1);
+    started = true;
+  });
+  const fails = hist.map((h, i) => h.ok ? "" :
+    `<rect x="${(pad + i*step - 1.5).toFixed(1)}" y="0" width="3" height="${H}" fill="rgba(242,85,90,0.5)"/>`
+  ).join("");
+
+  box.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="120" preserveAspectRatio="none">
+      ${fails}
+      <path d="${d}" fill="none" stroke="#8fb6f2" stroke-width="2"/>
+    </svg>
+    <div style="display:flex;gap:22px;color:var(--muted);font-size:12px;margin-top:6px">
+      <span>avg <b style="color:var(--text)">${ps.avg_ms ?? "—"} ms</b></span>
+      <span>max <b style="color:var(--text)">${ps.max_ms ?? "—"} ms</b></span>
+      <span>failed <b style="color:${ps.error_count ? "var(--red)" : "var(--text)"}">${ps.error_count ?? 0}</b> / ${ps.samples ?? 0}</span>
+      <span>scale ${maxV.toFixed(0)} ms full height</span>
+    </div>`;
+}
+
+function renderModules(state) {
+  const m = state.modules ?? {};
+
+  const a = m.a ?? {};
+  $("panel-a").classList.toggle("dim", !a.built);
+  $("mod-a").innerHTML = a.built
+    ? `<div class="kv"><span class="k">Events</span><span>${esc(a.detail)}</span></div>` +
+      (a.events ?? []).map(e => `<div class="kv"><span class="mono">${esc(e.event_id)}</span><span style="color:var(--muted)">${esc(e.registered_candidates ?? "")}</span></div>`).join("")
+    : `<span class="notbuilt">not built yet</span>
+       <ul class="plain"><li>expects <code>module-a-ingestion/events.json</code></li>
+       <li>panel lights up automatically once that file exists</li></ul>`;
+
+  const b = m.b ?? {};
+  $("panel-b").classList.toggle("dim", !b.built);
+  $("mod-b").innerHTML = b.built
+    ? `<div class="kv"><span class="k">Predictions</span><span>${esc(b.detail)}</span></div>` +
+      (b.files ?? []).map(f => `<div class="kv"><span class="mono">${esc(f)}</span><span></span></div>`).join("")
+    : `<span class="notbuilt">not built yet</span>
+       <ul class="plain"><li>expects <code>module-b-estimation/predictions/*.json</code></li>
+       <li>Module C currently runs on its hand-authored sample Prediction</li></ul>`;
+
+  const d = m.d ?? {};
+  $("panel-d").classList.toggle("dim", !d.built);
+  $("mod-d").innerHTML = d.built
+    ? `<div class="kv"><span class="k">Artifacts</span><span>${esc(d.detail)}</span></div>` +
+      (d.k6_scripts ?? []).map(f => `<div class="kv"><span class="mono">${esc(f)}</span><span style="color:var(--muted)">k6 script</span></div>`).join("") +
+      (d.results ?? []).map(f => `<div class="kv"><span class="mono">${esc(f)}</span><span style="color:var(--muted)">result</span></div>`).join("")
+    : `<span class="notbuilt">not built yet</span>
+       <ul class="plain">
+         <li>expects <code>module-d-evaluation/k6/*.js</code> and <code>module-d-evaluation/results/*.json</code></li>
+         <li>once the reactive baseline runs, its actions appear in the audit log above tagged <span class="src reactive">reactive</span></li>
+       </ul>`;
+}
+
+function render(state) {
+  if (state.fatal_error) {
+    $("banner").className = "banner";
+    $("banner").textContent = "Dashboard error: " + state.fatal_error;
+    return;
+  }
+  const dockerErr = state.docker && !state.docker.available ? state.docker.error : null;
+  if (dockerErr) {
+    $("banner").className = "banner";
+    $("banner").textContent = "Docker unreachable: " + dockerErr;
+  } else {
+    $("banner").className = "banner hidden";
+  }
+
+  const s = state.summary ?? {};
+  $("s-ready").textContent = s.replicas_ready ?? "—";
+  $("s-ready-sub").textContent = "of " + (s.replicas_total ?? 0) + " containers";
+  $("s-routed").textContent = s.drained ? "0" : (s.replicas_routed ?? "—");
+  $("s-routed-sub").textContent = s.drained ? "drained — nginx returns 502" : "upstream servers";
+  $("s-source").textContent = s.last_source ?? "—";
+  $("s-source-sub").textContent = state.scale_log?.last ? timeOnly(state.scale_log.last.timestamp) : " ";
+  const probe = state.probe ?? {};
+  $("s-latency").textContent = probe.ok ? probe.latency_ms + " ms" : (probe.enabled ? (probe.error ? "err" : "—") : "off");
+  $("s-actions").textContent = state.scale_log?.total ?? "—";
+
+  $("entrypoint").textContent = state.paths?.entrypoint ?? "localhost:8080";
+  $("probe-pill").textContent = probe.enabled ? "probe on" : "probe off";
+
+  renderReplicas(state);
+  renderPrediction(state);
+  renderNginx(state);
+  renderActions(state);
+  renderLatency(state);
+  renderModules(state);
+
+  $("updated").textContent = "· updated " + timeOnly(state.generated_at);
+}
+
+// --- live connection -------------------------------------------------------
+const source = new EventSource("/stream");
+source.onmessage = (e) => {
+  $("conn").className = "pill live";
+  $("conn").innerHTML = '<span class="dot"></span>live';
+  try { render(JSON.parse(e.data)); } catch (err) { console.error(err); }
+};
+source.onerror = () => {
+  $("conn").className = "pill dead";
+  $("conn").innerHTML = '<span class="dot off"></span>disconnected';
+};
+
+$("probe-toggle").onclick = async () => {
+  await fetch("/api/probe/toggle", { method: "POST" });
+};
+</script>
+</body>
+</html>

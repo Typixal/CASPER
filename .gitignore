@@ -1,0 +1,31 @@
+# --- local tooling, not project code ---
+.claude/
+
+# --- Python environments and caches (kept inside the project, off C:) ---
+.venv/
+venv/
+.pip-cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- Runtime output, not source ---
+# Each teammate's audit log is their own; committing it would conflict on
+# every demo run. The folder itself is kept via logs/.gitkeep.
+casper-module-c/logs/*.jsonl
+
+# Throwaway copy of a Prediction with its timestamps shifted to "now",
+# regenerated for each demo by scripts/make_demo_prediction.py.
+casper-module-c/policy/demo_prediction.json
+
+# NOTE: casper-module-c/nginx/nginx.conf is deliberately TRACKED even though
+# the controller regenerates it, so a fresh clone can `docker compose up`
+# without a bootstrap step. Expect it to show as modified after scaling --
+# that churn does not need to be committed.
+
+# --- OS / editor noise ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/

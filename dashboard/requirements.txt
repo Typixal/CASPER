@@ -1,0 +1,3 @@
+# Dashboard host-side dependency. Flask only -- no charting library, no CDN:
+# the page must render with zero internet access at demo time.
+Flask==3.0.3

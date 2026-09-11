@@ -1,0 +1,108 @@
+# CASPER — Live Demo Dashboard
+
+One screen showing what the CASPER demo is doing *right now*: portal replicas and
+their health, which of them nginx is actually routing to, where the predictive
+policy is inside its event window, and every scaling action as it lands in the
+audit log.
+
+Built for the projector during the Phase I demo — the point it has to make
+visible is that **CASPER scales up before the traffic arrives**, while a reactive
+scaler only moves after the spike has already started.
+
+---
+
+## Read-only by design
+
+The dashboard never scales anything, never writes to `nginx.conf`, and never
+touches the audit log. It only reads artifacts the system already produces:
+
+| Panel | Source |
+|---|---|
+| Portal replicas | `docker compose ps` in `casper-module-c/` |
+| nginx upstream | `casper-module-c/nginx/nginx.conf` (the generated file) |
+| Scale action log | `casper-module-c/logs/scale_actions.jsonl` |
+| Prediction window | `casper-module-c/policy/demo_prediction.json`, else `sample_prediction.json` |
+| Probe latency | one HTTP request per refresh to `http://localhost:8080/results` |
+| Modules A / B / D | presence of their files — greyed out until those modules exist |
+
+Starting or closing it cannot affect a demo in progress. It runs as its own
+host process, so `docker-compose.yml` is untouched and the Module C stack
+behaves exactly as it did before.
+
+---
+
+## Run it
+
+```powershell
+cd D:\Projects\CASPER\dashboard
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe app.py
+```
+
+Then open <http://localhost:8050>.
+
+The Module C stack should be up (`docker compose up -d` in `casper-module-c/`,
+or any `scale_controller.py` run). If Docker is not running, the dashboard still
+loads and shows a red banner explaining why — it does not crash.
+
+### Options
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `CASPER_DASH_PORT` | `8050` | Port the dashboard listens on |
+| `CASPER_DASH_REFRESH` | `2` | Seconds between snapshots |
+| `CASPER_DASH_PROBE` | `1` | `0` disables the latency probe at startup |
+
+---
+
+## The latency probe — read this before a Module D load test
+
+To show live latency, the dashboard sends **one request every refresh** to
+`http://localhost:8080/results`. That is the dashboard's own traffic, labelled as
+such on screen, and it is roughly 0.5 req/s.
+
+**Turn it off before running k6 for real numbers** — press *toggle probe* in the
+header, or start with `CASPER_DASH_PROBE=0`. Module D's measurements should not
+include traffic the dashboard generated. Everything else on the dashboard keeps
+working with the probe off; only the latency panel goes quiet.
+
+---
+
+## What to point at during the demo
+
+1. **Prediction window** — the countdown to `ramp_start` before anything happens.
+2. **Portal replicas** — watch containers appear *while the timeline is still in
+   the "before" phase*. That is the whole thesis of the project.
+3. **nginx upstream** — proves the new replicas are actually receiving traffic,
+   not just running.
+4. **Audit log** — the `predictive` / `reactive` / `manual` tags make it obvious
+   which brain caused each change.
+
+---
+
+## Endpoints
+
+| Route | Purpose |
+|---|---|
+| `/` | The dashboard page |
+| `/stream` | Server-sent events — pushes each new snapshot |
+| `/api/state` | The current snapshot as JSON (useful for debugging) |
+| `/api/probe/toggle` | POST — turns the latency probe on/off |
+
+---
+
+## Files
+
+```
+dashboard/
+├── app.py                Flask app, SSE stream, background collector thread
+├── collector.py          Reads Docker / nginx.conf / audit log / prediction
+├── templates/
+│   └── index.html        The whole UI (no CDN — works with zero internet)
+├── requirements.txt      Flask only
+└── README.md
+```
+
+No charting library and no CDN fonts: the page has to render on a laptop with no
+internet at demo time, so the latency chart is hand-drawn SVG.
