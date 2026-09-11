@@ -1,39 +1,69 @@
 @import "tailwindcss";
 
 /*
-  CASPER palette — pulled directly from CASPER_Architecture_Diagram.svg so
-  the dashboard reads as the same product as the diagram evaluators already
-  saw. Light theme throughout except the masthead (navy, see Masthead.jsx),
-  chosen over a dark theme for projector legibility: dark-on-dark accents
-  (steel on navy) lose separation on typical classroom projectors with
-  mediocre contrast and ambient light bleed, while a light background with
-  saturated accents stays legible regardless.
+  CASPER dashboard — dark "command center" theme.
+
+  Hues are the architecture diagram's (CASPER_Architecture_Diagram.svg), but
+  the accents are raised in luminance: the diagram's steel #4A6FA5 and green
+  #2F9E6E were picked for a white page and go muddy on a dark surface. Same
+  identity, readable on a projector.
+
+  Surfaces descend from #121A30, which is literally the diagram's own dark
+  code-block color, so the two artifacts still read as one product.
 */
 @theme {
-  --color-bg: #f4f6fb;
-  --color-panel: #eef2f8;
-  --color-panel-raised: #ffffff;
+  --color-bg: #080d1a;
+  --color-panel: #111a30;
+  --color-panel-raised: #16203a;
+  --color-panel-hover: #1c2847;
 
-  --color-text: #3d3d42;
-  --color-text-muted: #6b7280;
-  --color-text-faint: #9aa5c0;
+  --color-text: #e8eefb;
+  --color-text-muted: #94a2c4;
+  --color-text-faint: #5d6b8f;
 
-  --color-border: #d7dee8;
+  --color-border: #233150;
+  --color-border-bright: #33456e;
 
-  --color-navy: #16213e;
-  --color-steel: #4a6fa5; /* predictive */
-  --color-amber: #f2994a; /* reactive / peak phase */
-  --color-green: #2f9e6e; /* success / after phase / module D */
+  --color-navy: #0d1526;
+  --color-steel: #6e9be0; /* predictive */
+  --color-amber: #f7a84f; /* reactive / peak phase */
+  --color-green: #3fc98d; /* healthy / success / after phase */
+  --color-danger: #ff5f66;
 
-  --color-code-dark: #121a30;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
 
-  /* Not in the architecture diagram -- the diagram has no error state.
-     Desaturated red so it doesn't clash with the diagram-derived palette. */
-  --color-danger: #d64545;
-  --color-danger-bg: #fbeaea;
+html {
+  color-scheme: dark;
 }
 
 body {
   background: var(--color-bg);
   color: var(--color-text);
+  font-family: var(--font-sans);
+  /* Subtle depth behind the panels so the page doesn't read as a flat slab. */
+  background-image:
+    radial-gradient(1100px 520px at 12% -8%, rgba(110, 155, 224, 0.13), transparent 62%),
+    radial-gradient(900px 460px at 92% 4%, rgba(63, 201, 141, 0.08), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Tabular figures everywhere numbers change live, so digits don't jitter. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Slow pulse for "something just happened" affordances. */
+@keyframes casper-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.35); }
+}
+.pulse-dot {
+  animation: casper-pulse 1.8s ease-in-out infinite;
+}
+
+/* Recharts paints a default light tooltip cursor; tone it down for dark. */
+.recharts-tooltip-cursor {
+  fill: rgba(110, 155, 224, 0.08);
 }

@@ -1,11 +1,12 @@
+import { Activity, FileCode2, History, PieChart, Server } from "lucide-react"
 import Masthead from "./components/Masthead"
 import ErrorBanner from "./components/ErrorBanner"
-import Hero from "./components/Hero"
 import StatRail from "./components/StatRail"
 import Panel from "./components/Panel"
 import AuditTable from "./components/AuditTable"
 import NginxPanel from "./components/NginxPanel"
 import ModulePanel from "./components/ModulePanel"
+import PredictionRamp from "./components/charts/PredictionRamp"
 import ScaleTimeline from "./components/charts/ScaleTimeline"
 import LatencyChart from "./components/charts/LatencyChart"
 import ReplicaGrid from "./components/charts/ReplicaGrid"
@@ -17,76 +18,97 @@ export default function App() {
   const { toggle, pending } = useProbeToggle()
 
   const modules = state.modules ?? {}
+  const probeEnabled = state.probe?.enabled ?? true
 
   return (
-    <div className="min-h-screen bg-bg text-text">
+    <div className="min-h-screen">
       <Masthead
         entrypoint={state.paths?.entrypoint}
         connected={connected}
-        probeEnabled={state.probe?.enabled ?? true}
+        probeEnabled={probeEnabled}
         onToggleProbe={toggle}
         probePending={pending}
       />
 
-      <ErrorBanner state={state} />
+      <main className="mx-auto max-w-[1600px] space-y-5 px-5 py-5">
+        <ErrorBanner state={state} />
 
-      <Hero prediction={state.prediction} />
+        {/* 1 — The claim: CASPER knows what's coming and when it will act */}
+        <PredictionRamp
+          prediction={state.prediction}
+          currentReplicas={state.summary?.replicas_ready}
+        />
 
-      <StatRail state={state} />
+        {/* 2 — The numbers behind it */}
+        <StatRail state={state} />
 
-      <main className="mx-auto flex max-w-350 flex-col gap-6 px-4 py-6 sm:px-6">
-        {/* Centerpiece: the scaling-event story, oldest -> newest */}
-        <Panel title="Scale action timeline" tag="predicted event → planned → executed">
-          <ScaleTimeline scaleLog={state.scale_log} generatedAt={state.generated_at} />
-          <AuditTable actions={state.scale_log?.actions} />
-        </Panel>
-
-        {/* Traffic result: what actually happened */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Panel title="Probe latency" tag="dashboard's own request, 1 per refresh">
-            <LatencyChart probeSummary={state.probe_summary} />
+        {/* 3 — The proof: capacity moved, and who moved it */}
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+          <Panel
+            icon={History}
+            title="Capacity over time"
+            tag="oldest → newest"
+            className="xl:col-span-2"
+            delay={0.1}
+          >
+            <ScaleTimeline scaleLog={state.scale_log} />
+            <AuditTable actions={state.scale_log?.actions} />
           </Panel>
-          <Panel title="Portal replicas" tag="module c · live from docker">
+
+          <Panel icon={Server} title="Portal replicas" tag="live from docker" delay={0.15}>
             <ReplicaGrid docker={state.docker} probeSummary={state.probe_summary} />
           </Panel>
         </div>
 
-        {/* Supporting detail */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Panel title="Scaling source split" tag="all-time">
-            <SourceSplitBar scaleLog={state.scale_log} />
+        {/* 4 — What the traffic actually experienced */}
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+          <Panel
+            icon={Activity}
+            title="Probe latency"
+            tag="dashboard's own request · not k6"
+            className="xl:col-span-2"
+            delay={0.2}
+          >
+            <LatencyChart probeSummary={state.probe_summary} probeEnabled={probeEnabled} />
           </Panel>
-          <Panel title="nginx upstream" tag="generated config">
-            <NginxPanel nginx={state.nginx} />
-          </Panel>
+
+          <div className="space-y-5">
+            <Panel icon={PieChart} title="Who scaled it" tag="all-time" delay={0.25}>
+              <SourceSplitBar scaleLog={state.scale_log} />
+            </Panel>
+            <Panel icon={FileCode2} title="nginx upstream" tag="generated config" delay={0.3}>
+              <NginxPanel nginx={state.nginx} />
+            </Panel>
+          </div>
         </div>
 
-        {/* Module status strip */}
+        {/* 5 — Where the rest of the system stands */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <ModulePanel title="Module A — event dataset" module={modules.a}>
+          <ModulePanel title="Module A — event dataset" module={modules.a} delay={0.35}>
             {modules.a?.built ? (
               <>
-                <div className="mb-1">{modules.a.detail}</div>
+                <div className="text-text">{modules.a.detail}</div>
                 {(modules.a.events ?? []).map((e) => (
                   <div key={e.event_id} className="flex justify-between font-mono text-[11px]">
                     <span>{e.event_id}</span>
-                    <span className="text-text-muted">{e.registered_candidates}</span>
+                    <span className="tnum text-text-faint">{e.registered_candidates}</span>
                   </div>
                 ))}
               </>
             ) : (
               <>
-                expects <code className="font-mono">module-a-ingestion/events.json</code>
-                <br />
-                panel lights up automatically once that file exists
+                <div>
+                  expects <code className="font-mono text-text-muted">module-a-ingestion/events.json</code>
+                </div>
+                <div>lights up on its own once that file exists</div>
               </>
             )}
           </ModulePanel>
 
-          <ModulePanel title="Module B — estimation output" module={modules.b}>
+          <ModulePanel title="Module B — estimation model" module={modules.b} delay={0.4}>
             {modules.b?.built ? (
               <>
-                <div className="mb-1">{modules.b.detail}</div>
+                <div className="text-text">{modules.b.detail}</div>
                 {(modules.b.files ?? []).map((f) => (
                   <div key={f} className="font-mono text-[11px]">
                     {f}
@@ -95,46 +117,46 @@ export default function App() {
               </>
             ) : (
               <>
-                expects <code className="font-mono">module-b-estimation/predictions/*.json</code>
-                <br />
-                Module C currently runs on its hand-authored sample Prediction
+                <div>
+                  expects{" "}
+                  <code className="font-mono text-text-muted">module-b-estimation/predictions/*.json</code>
+                </div>
+                <div>Module C is running on its hand-authored sample Prediction</div>
               </>
             )}
           </ModulePanel>
 
-          <ModulePanel title="Module D — reactive baseline & k6" module={modules.d}>
+          <ModulePanel title="Module D — reactive baseline & k6" module={modules.d} delay={0.45}>
             {modules.d?.built ? (
               <>
-                <div className="mb-1">{modules.d.detail}</div>
-                {(modules.d.k6_scripts ?? []).map((f) => (
-                  <div key={f} className="font-mono text-[11px] text-text-muted">
-                    {f} <span className="text-text-faint">k6 script</span>
-                  </div>
-                ))}
-                {(modules.d.results ?? []).map((f) => (
-                  <div key={f} className="font-mono text-[11px] text-text-muted">
-                    {f} <span className="text-text-faint">result</span>
+                <div className="text-text">{modules.d.detail}</div>
+                {[...(modules.d.k6_scripts ?? []), ...(modules.d.results ?? [])].map((f) => (
+                  <div key={f} className="font-mono text-[11px]">
+                    {f}
                   </div>
                 ))}
               </>
             ) : (
               <>
-                expects <code className="font-mono">module-d-evaluation/k6/*.js</code> and{" "}
-                <code className="font-mono">module-d-evaluation/results/*.json</code>
-                <br />
-                once the reactive baseline runs, its actions appear in the timeline above tagged{" "}
-                <span className="font-semibold text-amber">reactive</span>
+                <div>
+                  expects <code className="font-mono text-text-muted">module-d-evaluation/</code> k6 scripts
+                  and results
+                </div>
+                <div>
+                  its actions will appear above tagged{" "}
+                  <span className="font-semibold text-amber">reactive</span>
+                </div>
               </>
             )}
           </ModulePanel>
         </div>
-      </main>
 
-      <footer className="mx-auto max-w-350 px-4 pb-8 text-xs text-text-muted sm:px-6">
-        Read-only view. The dashboard never scales anything — it reads Docker state,{" "}
-        <code className="font-mono">nginx/nginx.conf</code>,{" "}
-        <code className="font-mono">logs/scale_actions.jsonl</code> and the active Prediction.
-      </footer>
+        <footer className="pb-6 pt-1 text-[11px] leading-relaxed text-text-faint">
+          Read-only view — the dashboard never scales anything. It reads Docker state,{" "}
+          <code className="font-mono">nginx/nginx.conf</code>,{" "}
+          <code className="font-mono">logs/scale_actions.jsonl</code> and the active Prediction.
+        </footer>
+      </main>
     </div>
   )
 }

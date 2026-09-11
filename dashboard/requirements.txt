@@ -1,3 +1,10 @@
-# Dashboard host-side dependency. Flask only -- no charting library, no CDN:
-# the page must render with zero internet access at demo time.
+# Dashboard host-side dependency: Flask only.
+#
+# The frontend (React + Tailwind + recharts) lives in dashboard/frontend/ and
+# is compiled into dashboard/static/dist/ by Vite -- that build output is
+# committed, so the demo machine needs no npm and no node, just this.
+#
+# The one live network call the page makes is Google Fonts. If that is
+# unreachable the page still renders correctly, falling back to system
+# sans/mono; nothing else is fetched at runtime.
 Flask==3.0.3

@@ -1,16 +1,23 @@
+import { motion } from "framer-motion"
+import { Gauge, ListChecks, Network, Server, Timer } from "lucide-react"
+import AnimatedNumber from "./AnimatedNumber"
 import { sourceColor, sourceLabel, timeOnly } from "../lib/format"
 
-function StatTile({ label, value, sub, accent }) {
+function StatTile({ icon: Icon, label, value, sub, accent = "text-text", index = 0 }) {
   return (
-    <div className="rounded-xl border border-border bg-panel-raised p-4 shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.05 + index * 0.05, ease: [0.22, 1, 0.36, 1] }}
+      className="rounded-2xl border border-border bg-panel-raised/70 px-4 py-3.5 backdrop-blur-sm"
+    >
+      <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-text-faint">
+        <Icon size={12} strokeWidth={2.4} />
         {label}
       </div>
-      <div className={`mt-1 text-3xl font-bold leading-tight ${accent ?? "text-navy"}`}>
-        {value}
-      </div>
-      <div className="mt-0.5 text-xs text-text-muted">{sub ?? " "}</div>
-    </div>
+      <div className={`mt-1.5 text-[34px] font-extrabold leading-none ${accent}`}>{value}</div>
+      <div className="mt-1 truncate text-[11px] text-text-faint">{sub ?? " "}</div>
+    </motion.div>
   )
 }
 
@@ -18,37 +25,63 @@ export default function StatRail({ state }) {
   const summary = state.summary ?? {}
   const probe = state.probe ?? {}
   const scaleLog = state.scale_log ?? {}
-  const lastSourceColor = summary.last_source ? sourceColor(summary.last_source) : null
+  const lastColor = summary.last_source ? sourceColor(summary.last_source) : null
 
   return (
-    <section className="grid grid-cols-2 gap-3 px-4 pt-6 sm:grid-cols-3 sm:px-6 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       <StatTile
-        label="Replicas ready"
-        value={summary.replicas_ready ?? "—"}
+        index={0}
+        icon={Server}
+        label="replicas ready"
+        value={<AnimatedNumber value={summary.replicas_ready ?? null} />}
         sub={`of ${summary.replicas_total ?? 0} containers`}
+        accent="text-green"
       />
       <StatTile
-        label="Routed by nginx"
-        value={summary.drained ? "0" : (summary.replicas_routed ?? "—")}
-        sub={summary.drained ? "drained — 502" : "upstream servers"}
-        accent={summary.drained ? "text-danger" : undefined}
+        index={1}
+        icon={Network}
+        label="routed by nginx"
+        value={<AnimatedNumber value={summary.drained ? 0 : (summary.replicas_routed ?? null)} />}
+        sub={summary.drained ? "drained — nginx returns 502" : "upstream servers"}
+        accent={summary.drained ? "text-danger" : "text-steel"}
       />
       <StatTile
-        label="Last scaled by"
-        value={summary.last_source ? sourceLabel(summary.last_source) : "—"}
+        index={2}
+        icon={Gauge}
+        label="last scaled by"
+        value={
+          <span className="text-[26px]">
+            {summary.last_source ? sourceLabel(summary.last_source) : "—"}
+          </span>
+        }
         sub={scaleLog.last ? timeOnly(scaleLog.last.timestamp) : " "}
-        accent={lastSourceColor?.text}
+        accent={lastColor?.text ?? "text-text"}
       />
       <StatTile
-        label="Probe latency"
-        value={probe.ok ? `${probe.latency_ms} ms` : probe.enabled ? (probe.error ? "err" : "—") : "off"}
+        index={3}
+        icon={Timer}
+        label="probe latency"
+        value={
+          probe.ok ? (
+            <>
+              <AnimatedNumber value={probe.latency_ms ? Math.round(probe.latency_ms) : null} />
+              <span className="ml-1 text-lg font-semibold text-text-faint">ms</span>
+            </>
+          ) : probe.enabled ? (
+            <span className="text-[26px] text-danger">{probe.error ? "error" : "—"}</span>
+          ) : (
+            <span className="text-[26px] text-text-faint">off</span>
+          )
+        }
         sub="dashboard probe, not k6"
       />
       <StatTile
-        label="Scale actions"
-        value={scaleLog.total ?? "—"}
-        sub="in audit log"
+        index={4}
+        icon={ListChecks}
+        label="scale actions"
+        value={<AnimatedNumber value={scaleLog.total ?? null} />}
+        sub="in the audit log"
       />
-    </section>
+    </div>
   )
 }
