@@ -40,12 +40,14 @@ export function sourceLabel(source) {
   return SOURCE_LABEL[source] ?? source ?? "unknown"
 }
 
-// Tailwind class fragments per source, centralised so every chart/badge
-// agrees on the same mapping (steel=predictive, amber=reactive, grey=manual).
+// Tailwind class fragments and raw hex per source, centralised so every
+// chart/badge agrees on the same mapping (steel=predictive, amber=reactive,
+// grey=manual). Hexes are the dark-theme variants -- the architecture
+// diagram's originals are too dim to read on a dark surface.
 export const SOURCE_COLORS = {
-  predictive: { text: "text-steel", bg: "bg-steel", fill: "#4A6FA5" },
-  reactive: { text: "text-amber", bg: "bg-amber", fill: "#F2994A" },
-  manual: { text: "text-text-muted", bg: "bg-text-muted", fill: "#6B7280" },
+  predictive: { text: "text-steel", bg: "bg-steel", fill: "#6E9BE0" },
+  reactive: { text: "text-amber", bg: "bg-amber", fill: "#F7A84F" },
+  manual: { text: "text-text-muted", bg: "bg-text-muted", fill: "#94A2C4" },
 }
 
 export function sourceColor(source) {

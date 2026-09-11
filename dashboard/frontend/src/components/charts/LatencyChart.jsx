@@ -1,113 +1,121 @@
-const WIDTH = 900
-const HEIGHT = 220
-const PAD_L = 42
-const PAD_R = 12
-const PAD_T = 12
-const PAD_B = 24
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
+import { Radio } from "lucide-react"
+
+const STEEL = "#6E9BE0"
+const DANGER = "#FF5F66"
+
+function ProbeTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const point = payload[0].payload
+  return (
+    <div className="rounded-lg border border-border-bright bg-panel px-3 py-2 text-xs shadow-xl">
+      <div className="tnum font-semibold text-text">
+        {point.failed ? "request failed" : `${point.latency} ms`}
+      </div>
+      <div className="mt-0.5 font-mono text-[11px] text-text-faint">{point.clock}</div>
+      {point.served_by && (
+        <div className="mt-1 font-mono text-[11px] text-steel">served by {point.served_by}</div>
+      )}
+    </div>
+  )
+}
 
 /**
- * Line + soft area chart of the dashboard's own latency probe history
- * (probe_summary.history, a ring buffer of up to 90 samples). Gridlines and
- * ms labels replace the old bare hand-drawn line. Still pure inline SVG, no
- * charting library, scaled via viewBox so it's responsive.
+ * Probe latency over time. The dashboard's own request, once per refresh --
+ * labelled as such so it is never confused with Module D's k6 numbers.
+ * Failed probes (a drained stack returning 502) are drawn as red reference
+ * lines rather than silently breaking the series.
  */
-export default function LatencyChart({ probeSummary }) {
+export default function LatencyChart({ probeSummary, probeEnabled }) {
   const history = probeSummary?.history ?? []
 
   if (!history.length) {
     return (
-      <div className="flex h-[220px] items-center justify-center rounded-2xl border border-dashed border-border bg-panel/60 text-text-muted">
-        Probe disabled or no samples yet.
+      <div className="flex min-h-[230px] flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border text-text-faint">
+        <Radio size={20} />
+        <span className="text-sm">{probeEnabled ? "waiting for samples…" : "probe is switched off"}</span>
       </div>
     )
   }
 
-  const okValues = history.filter((h) => h.ok && h.latency_ms != null).map((h) => h.latency_ms)
-  const maxV = Math.max(50, ...okValues)
-  const plotW = WIDTH - PAD_L - PAD_R
-  const plotH = HEIGHT - PAD_T - PAD_B
-  const stepX = history.length > 1 ? plotW / (history.length - 1) : 0
-
-  const xAt = (i) => PAD_L + i * stepX
-  const yAt = (v) => PAD_T + plotH - (v / maxV) * plotH
-
-  let linePath = ""
-  let areaPath = ""
-  let started = false
-  history.forEach((h, i) => {
-    if (h.ok && h.latency_ms != null) {
-      const x = xAt(i)
-      const y = yAt(h.latency_ms)
-      linePath += (started ? " L" : " M") + `${x.toFixed(1)},${y.toFixed(1)}`
-      if (!started) {
-        areaPath += `M${x.toFixed(1)},${(PAD_T + plotH).toFixed(1)} L${x.toFixed(1)},${y.toFixed(1)}`
-      } else {
-        areaPath += ` L${x.toFixed(1)},${y.toFixed(1)}`
-      }
-      started = true
-    } else {
-      started = false
-    }
-  })
-  if (areaPath) {
-    const lastOkIndex = history.map((h) => h.ok && h.latency_ms != null).lastIndexOf(true)
-    areaPath += ` L${xAt(lastOkIndex).toFixed(1)},${(PAD_T + plotH).toFixed(1)} Z`
-  }
-
-  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((f) => ({
-    y: PAD_T + plotH * (1 - f),
-    label: Math.round(maxV * f),
+  const data = history.map((h, i) => ({
+    i,
+    latency: h.ok ? h.latency_ms : null,
+    failed: !h.ok,
+    served_by: h.served_by,
+    clock: h.at ? new Date(h.at).toLocaleTimeString() : "",
   }))
 
+  const failures = data.filter((d) => d.failed)
+
   return (
-    <div>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT} preserveAspectRatio="none">
-        {gridLines.map((g, i) => (
-          <g key={i}>
-            <line x1={PAD_L} y1={g.y} x2={WIDTH - PAD_R} y2={g.y} stroke="#D7DEE8" strokeWidth="1" />
-            <text x={PAD_L - 8} y={g.y + 4} textAnchor="end" fontSize="11" fill="#6B7280">
-              {g.label}
-            </text>
-          </g>
-        ))}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-[230px] w-full flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
+            <defs>
+              <linearGradient id="latencyFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={STEEL} stopOpacity={0.45} />
+                <stop offset="100%" stopColor={STEEL} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
 
-        {/* failed-probe markers */}
-        {history.map((h, i) =>
-          h.ok ? null : (
-            <rect
-              key={`fail-${i}`}
-              x={xAt(i) - 2}
-              y={PAD_T}
-              width="4"
-              height={plotH}
-              fill="#D64545"
-              opacity="0.35"
+            <CartesianGrid stroke="#233150" strokeDasharray="3 4" vertical={false} />
+            <XAxis dataKey="i" hide />
+            <YAxis
+              tick={{ fill: "#5D6B8F", fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              width={44}
+              tickFormatter={(v) => `${v}`}
+              label={{
+                value: "ms",
+                position: "insideTopLeft",
+                offset: -2,
+                style: { fill: "#5D6B8F", fontSize: 10 },
+              }}
             />
-          ),
-        )}
+            <Tooltip content={<ProbeTooltip />} cursor={{ stroke: STEEL, strokeDasharray: "3 3" }} />
 
-        {areaPath && <path d={areaPath} fill="#4A6FA5" opacity="0.12" />}
-        {linePath && <path d={linePath} fill="none" stroke="#4A6FA5" strokeWidth="2.5" />}
+            {failures.map((f) => (
+              <ReferenceLine key={f.i} x={f.i} stroke={DANGER} strokeOpacity={0.45} strokeWidth={3} />
+            ))}
 
-        {history.map((h, i) =>
-          h.ok && h.latency_ms != null ? (
-            <circle key={`pt-${i}`} cx={xAt(i)} cy={yAt(h.latency_ms)} r="3" fill="#4A6FA5">
-              <title>{`${h.latency_ms} ms — ${h.served_by ?? "unknown replica"}`}</title>
-            </circle>
-          ) : null,
-        )}
-      </svg>
+            <Area
+              type="monotone"
+              dataKey="latency"
+              stroke={STEEL}
+              strokeWidth={2.4}
+              fill="url(#latencyFill)"
+              connectNulls={false}
+              isAnimationActive
+              animationDuration={450}
+              dot={false}
+              activeDot={{ r: 4, fill: STEEL, stroke: "#0B1020", strokeWidth: 2 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
 
-      <div className="mt-2 flex flex-wrap gap-5 text-xs text-text-muted">
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-border/60 pt-3 text-xs text-text-faint">
         <span>
-          avg <b className="text-text">{probeSummary.avg_ms ?? "—"} ms</b>
+          avg <b className="tnum text-text">{probeSummary.avg_ms ?? "—"}</b> ms
         </span>
         <span>
-          max <b className="text-text">{probeSummary.max_ms ?? "—"} ms</b>
+          max <b className="tnum text-text">{probeSummary.max_ms ?? "—"}</b> ms
         </span>
         <span>
           failed{" "}
-          <b className={probeSummary.error_count ? "text-danger" : "text-text"}>
+          <b className={`tnum ${probeSummary.error_count ? "text-danger" : "text-text"}`}>
             {probeSummary.error_count ?? 0}
           </b>{" "}
           / {probeSummary.samples ?? 0}

@@ -24,8 +24,10 @@ The experiment: **same infrastructure, same traffic curve, two different brains
 deciding when to scale.** A conventional reactive auto-scaler versus CASPER's
 calendar-driven predictive scheduler.
 
-Everything runs locally. No cloud account, no API key, no internet at demo time
-(aside from one-time Docker image pulls).
+Everything runs locally. No cloud account, no API key, no live external APIs.
+The only network call at demo time is the dashboard's webfont request to
+Google Fonts, which degrades to system fonts if it fails; Docker images are
+pulled once, up front.
 
 ---
 
@@ -125,12 +127,24 @@ each long-running piece in its own window so you can see it work.
 .\run-demo.ps1                                  # stack + dashboard, nothing scheduled
 .\run-demo.ps1 -Demo -UpIn 20 -DownIn 120 -Peak 4   # full demo, custom timings
 .\run-demo.ps1 -Replicas 3 -Build               # rebuild the image, start with 3
-.\run-demo.ps1 -Stop                            # shut everything down
+.\run-demo.ps1 -Detach                          # launch and exit, leave it running
+.\run-demo.ps1 -Stop                            # tear down whatever is running
 ```
 
-`-NoDashboard`, `-NoBrowser` also available. `Get-Help .\run-demo.ps1 -Full`
-lists everything. If PowerShell blocks the script:
-`powershell -ExecutionPolicy Bypass -File .\run-demo.ps1`.
+**It cleans up after itself.** The script stays in the foreground and waits;
+press Ctrl+C and it stops the dashboard, the policy, and every container, so
+nothing is left eating memory after the demo. Teardown also sweeps up orphans —
+any python process running out of this repo, plus whatever holds port 8050 — so
+a window closed by hand last time does not linger. Startup runs the same sweep
+first, so repeated runs never stack up.
+
+Closing the window with the X button instead of Ctrl+C kills the script without
+running its cleanup; the next `.\run-demo.ps1` clears the leftovers, or run
+`.\run-demo.ps1 -Stop` yourself.
+
+`-NoDashboard`, `-NoBrowser`, `-KeepContainers` also available.
+`Get-Help .\run-demo.ps1 -Full` lists everything. If PowerShell blocks the
+script: `powershell -ExecutionPolicy Bypass -File .\run-demo.ps1`.
 
 > The launcher is a convenience wrapper covering Modules C and the dashboard —
 > the pieces built so far. Extend it as A, B and D land. Everything it does can

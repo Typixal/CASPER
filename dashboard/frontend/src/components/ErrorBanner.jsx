@@ -1,17 +1,23 @@
+import { AlertTriangle, Loader } from "lucide-react"
+import { motion } from "framer-motion"
+
 /**
- * A single global banner for conditions that make the whole page unreliable
- * (startup, a fatal collector exception, or Docker being unreachable --
- * which affects nearly every panel). Narrower per-subsystem errors
- * (nginx.error, scale_log.error, prediction.error, probe.error) are shown
- * inline inside their own panel instead, so one broken data source doesn't
- * hide the ones that are fine.
+ * One global banner for conditions that make the whole page unreliable:
+ * startup, a fatal collector exception, or Docker being unreachable.
+ * Narrower per-subsystem errors render inside their own panel instead, so
+ * one broken source doesn't hide the panels that are fine.
  */
 export default function ErrorBanner({ state }) {
   if (state.starting) {
     return (
-      <div className="mx-4 mt-4 rounded-lg border border-border bg-panel px-4 py-3 text-sm text-text-muted sm:mx-6">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex items-center gap-2 rounded-xl border border-border bg-panel/70 px-4 py-2.5 text-sm text-text-muted"
+      >
+        <Loader size={15} className="animate-spin" />
         Waiting for the first snapshot…
-      </div>
+      </motion.div>
     )
   }
 
@@ -24,8 +30,13 @@ export default function ErrorBanner({ state }) {
   if (!message) return null
 
   return (
-    <div className="mx-4 mt-4 rounded-lg border border-danger/40 bg-danger-bg px-4 py-3 text-sm text-danger sm:mx-6">
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-center gap-2.5 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
+    >
+      <AlertTriangle size={16} className="shrink-0" />
       {message}
-    </div>
+    </motion.div>
   )
 }
