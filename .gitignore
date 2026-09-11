@@ -29,3 +29,6 @@ Desktop.ini
 .DS_Store
 .vscode/
 .idea/
+
+# PIDs of the windows run-demo.ps1 started (local runtime state)
+.casper-demo.pid

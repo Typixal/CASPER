@@ -33,6 +33,7 @@ Everything runs locally. No cloud account, no API key, no internet at demo time
 
 ```
 CASPER/
+├── run-demo.ps1              One-command launcher for the whole demo
 ├── casper-module-c/          Module C — scale controller + predictive scheduler   [BUILT]
 ├── dashboard/                Live demo dashboard                                  [BUILT]
 ├── module-a-ingestion/       Module A — event dataset + loader                    [not built]
@@ -107,7 +108,35 @@ All timestamps are ISO 8601 with a timezone offset (IST, `+05:30`).
 
 ## Running the demo today
 
-Prerequisites: Docker Desktop running, Python 3.10+.
+Prerequisites: Docker Desktop installed, Python 3.10+ on PATH.
+
+### One command
+
+```powershell
+.\run-demo.ps1 -Demo
+```
+
+Starts Docker Desktop if it is not running, creates the virtual environments on
+first use, builds the portal image, scales the stack up, opens the dashboard in
+the browser, and schedules the predictive policy so it scales up ~20s later —
+each long-running piece in its own window so you can see it work.
+
+```powershell
+.\run-demo.ps1                                  # stack + dashboard, nothing scheduled
+.\run-demo.ps1 -Demo -UpIn 20 -DownIn 120 -Peak 4   # full demo, custom timings
+.\run-demo.ps1 -Replicas 3 -Build               # rebuild the image, start with 3
+.\run-demo.ps1 -Stop                            # shut everything down
+```
+
+`-NoDashboard`, `-NoBrowser` also available. `Get-Help .\run-demo.ps1 -Full`
+lists everything. If PowerShell blocks the script:
+`powershell -ExecutionPolicy Bypass -File .\run-demo.ps1`.
+
+> The launcher is a convenience wrapper covering Modules C and the dashboard —
+> the pieces built so far. Extend it as A, B and D land. Everything it does can
+> still be run by hand, as below.
+
+### Or step by step
 
 **1 — bring up the stack and scale it manually**
 
