@@ -1,0 +1,28 @@
+# SYNTHETIC search-interest curve -- shaped like a Google Trends result-day
+# spike, built once by hand. Nothing here is fetched live, at build time or
+# at demo time.
+#
+# offset_minutes : minutes relative to the event's publication time
+#                  (negative = before publication)
+# interest       : relative search interest, 0-100, exactly as Google Trends
+#                  normalises its own output
+#
+# The shape encodes three things the candidate count cannot: candidates start
+# refreshing before the announced time, interest peaks shortly AFTER
+# publication (people arrive late, and retry), then decays over hours.
+offset_minutes,interest
+-120,1
+-90,4
+-60,7
+-30,10
+-15,38
+0,80
+15,100
+30,88
+60,65
+90,52
+120,40
+180,22
+240,10
+300,4
+360,2

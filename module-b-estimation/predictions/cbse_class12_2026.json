@@ -1,0 +1,7 @@
+{
+  "event_id": "cbse_class12_2026",
+  "predicted_peak_replicas": 13,
+  "ramp_start": "2026-05-13T09:30:00+05:30",
+  "ramp_peak": "2026-05-13T10:15:00+05:30",
+  "ramp_end": "2026-05-13T14:00:00+05:30"
+}

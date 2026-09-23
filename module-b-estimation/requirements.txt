@@ -1,0 +1,6 @@
+# Module B's estimator uses only the standard library, so a Prediction can be
+# produced anywhere Python runs -- no pandas needed for a weighted formula
+# over six events.
+#
+# pytest is a development dependency, used for the module's test suite.
+pytest==8.3.3
