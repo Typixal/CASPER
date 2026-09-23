@@ -1,0 +1,7 @@
+{
+  "event_id": "cbse_class12_2025",
+  "predicted_peak_replicas": 12,
+  "ramp_start": "2025-05-13T09:30:00+05:30",
+  "ramp_peak": "2025-05-13T10:15:00+05:30",
+  "ramp_end": "2025-05-13T14:00:00+05:30"
+}

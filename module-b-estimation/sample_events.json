@@ -1,0 +1,19 @@
+[
+  {
+    "_comment": "Hand-authored sample Events matching Module A's frozen Event schema, so Module B is testable and demoable on its own before A's dataset is wired in. SYNTHETIC figures, not official statistics.",
+    "event_id": "cbse_class12_2025",
+    "board": "CBSE",
+    "event_type": "exam_result",
+    "date": "2025-05-13T10:00:00+05:30",
+    "registered_candidates": 1650000,
+    "prior_similar_event_ids": []
+  },
+  {
+    "event_id": "cbse_class12_2026",
+    "board": "CBSE",
+    "event_type": "exam_result",
+    "date": "2026-05-13T10:00:00+05:30",
+    "registered_candidates": 1700000,
+    "prior_similar_event_ids": ["cbse_class12_2025"]
+  }
+]
