@@ -1,0 +1,51 @@
+[
+  {
+    "_comment": "SYNTHETIC SAMPLE DATA. Magnitudes are representative of Indian civic events but are NOT official published figures. See README.md before quoting any number in the report.",
+    "event_id": "cbse_class12_2025",
+    "board": "CBSE",
+    "event_type": "exam_result",
+    "date": "2025-05-13T10:00:00+05:30",
+    "registered_candidates": 1600000,
+    "prior_similar_event_ids": []
+  },
+  {
+    "event_id": "cbse_class12_2026",
+    "board": "CBSE",
+    "event_type": "exam_result",
+    "date": "2026-05-13T10:00:00+05:30",
+    "registered_candidates": 1650000,
+    "prior_similar_event_ids": ["cbse_class12_2025"]
+  },
+  {
+    "event_id": "kerala_plustwo_admission_2025",
+    "board": "Kerala HSE",
+    "event_type": "admission_deadline",
+    "date": "2025-06-20T17:00:00+05:30",
+    "registered_candidates": 420000,
+    "prior_similar_event_ids": []
+  },
+  {
+    "event_id": "kerala_plustwo_admission_2026",
+    "board": "Kerala HSE",
+    "event_type": "admission_deadline",
+    "date": "2026-06-20T17:00:00+05:30",
+    "registered_candidates": 445000,
+    "prior_similar_event_ids": ["kerala_plustwo_admission_2025"]
+  },
+  {
+    "event_id": "ssc_cgl_result_2025",
+    "board": "SSC",
+    "event_type": "recruitment_result",
+    "date": "2025-08-08T18:00:00+05:30",
+    "registered_candidates": 2500000,
+    "prior_similar_event_ids": []
+  },
+  {
+    "event_id": "ssc_cgl_result_2026",
+    "board": "SSC",
+    "event_type": "recruitment_result",
+    "date": "2026-08-08T18:00:00+05:30",
+    "registered_candidates": 2650000,
+    "prior_similar_event_ids": ["ssc_cgl_result_2025"]
+  }
+]
