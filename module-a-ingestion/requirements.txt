@@ -1,0 +1,5 @@
+# Module A has no runtime dependencies -- the loader uses only the standard
+# library, so the dataset can be read anywhere Python runs.
+#
+# pytest is a development dependency, used for the module's test suite.
+pytest==8.3.3
