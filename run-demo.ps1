@@ -10,8 +10,15 @@
       3. Builds the portal image (first run, or with -Build)
       4. Scales the portal to a starting replica count
       5. Opens the live dashboard in its own window, then in the browser
-      6. Optionally starts the predictive policy against a time-shifted
-         Prediction, so the scale-up actually fires during the demo
+      6. -Demo: runs the real pipeline end to end --
+            Module A validates the event dataset,
+            Module B turns it into Predictions,
+            Module C schedules a time-shifted copy of one of them,
+         so the scale-up fires during the demo from B's actual output
+      7. -Compare: runs Module D's experiment instead -- the same exam-day
+         traffic replayed twice through k6, once with the reactive baseline
+         scaling and once with CASPER's predictive policy, then writes the
+         comparison to module-d-evaluation\results\ and the dashboard
 
     Then it STAYS IN THE FOREGROUND and waits. Press Ctrl+C (or close this
     window) and it tears everything back down: dashboard, policy, and the
@@ -21,13 +28,15 @@
     demo up; you are then responsible for running `.\run-demo.ps1 -Stop`.
 
     Teardown is deliberately thorough. It stops:
-      - the dashboard and policy processes this run started (tracked by PID)
-      - any ORPHANED python process whose command line points inside this
-        repo (a window closed by hand, a previous run that lost its PID file)
+      - the dashboard, policy and comparison processes this run started
+        (tracked by PID)
+      - any ORPHANED python or k6 process whose command line points inside
+        this repo (a window closed by hand, a previous run that lost its PID
+        file, a k6 run or reactive scaler the comparison started)
       - whatever is listening on the dashboard port
       - every container in the Module C compose project, plus orphans
-    It never touches python processes belonging to anything else on the
-    machine -- the command line has to point inside this repo folder.
+    It never touches processes belonging to anything else on the machine --
+    the command line has to point inside this repo folder.
 
 .PARAMETER Replicas
     Starting replica count. Default 2.
@@ -46,8 +55,17 @@
     With -Demo: seconds from now until the scale-down fires. Default 120.
 
 .PARAMETER Peak
-    With -Demo: peak replica count to scale up to. Default 4. The real
-    prediction says 12, which is a lot of containers for a laptop.
+    With -Demo: cap the peak replica count Module B predicted. Default 4 --
+    B's real estimates (12-20) are a lot of containers for a laptop. Pass 0
+    to use B's number unchanged.
+
+.PARAMETER EventId
+    With -Demo: which event's Prediction to schedule. Default
+    cbse_class12_2026. Any event_id from module-a-ingestion\events.json.
+
+.PARAMETER Compare
+    Run Module D's reactive-vs-predictive experiment (~9 minutes) instead of
+    the live demo. Cannot be combined with -Demo.
 
 .PARAMETER NoDashboard
     Skip the dashboard.
@@ -70,6 +88,10 @@
     Full demo. Ctrl+C when finished and everything is cleaned up.
 
 .EXAMPLE
+    .\run-demo.ps1 -Compare
+    The experiment. Results land in module-d-evaluation\results\.
+
+.EXAMPLE
     .\run-demo.ps1 -Stop
     Clean up a demo that was started with -Detach, or left over from a crash.
 
@@ -86,6 +108,8 @@ param(
     [int]$UpIn = 20,
     [int]$DownIn = 120,
     [int]$Peak = 4,
+    [string]$EventId = "cbse_class12_2026",
+    [switch]$Compare,
     [switch]$NoDashboard,
     [switch]$NoBrowser,
     [switch]$Detach,
@@ -97,12 +121,19 @@ $ErrorActionPreference = "Stop"
 
 # --- Paths -----------------------------------------------------------------
 $Root      = $PSScriptRoot
+$ModuleA   = Join-Path $Root "module-a-ingestion"
+$ModuleB   = Join-Path $Root "module-b-estimation"
 $ModuleC   = Join-Path $Root "casper-module-c"
+$ModuleD   = Join-Path $Root "module-d-evaluation"
 $Dashboard = Join-Path $Root "dashboard"
 $PidFile   = Join-Path $Root ".casper-demo.pid"
 
+$ModuleAPython   = Join-Path $ModuleA   ".venv\Scripts\python.exe"
+$ModuleBPython   = Join-Path $ModuleB   ".venv\Scripts\python.exe"
 $ModuleCPython   = Join-Path $ModuleC   ".venv\Scripts\python.exe"
+$ModuleDPython   = Join-Path $ModuleD   ".venv\Scripts\python.exe"
 $DashboardPython = Join-Path $Dashboard ".venv\Scripts\python.exe"
+$K6Exe           = Join-Path $ModuleD   "tools\k6.exe"
 
 $DashboardPort = 8050
 $PortalPort    = 8080
@@ -165,17 +196,20 @@ function Get-SavedPids {
 # ---------------------------------------------------------------------------
 # Teardown
 # ---------------------------------------------------------------------------
-function Get-CasperPythonProcesses {
+function Get-CasperProcesses {
     <#
-        Every python process whose command line points inside THIS repo.
+        Every python or k6 process whose command line points inside THIS repo.
 
         Matching on the command line rather than just the image name is what
         makes this safe: an unrelated python doing real work on this machine
-        is never touched, and a dashboard or policy window that was closed by
-        hand (so its PID file entry is stale) is still found.
+        is never touched, and a dashboard, policy, reactive scaler or k6 run
+        whose window was closed by hand (so its PID file entry is stale) is
+        still found. k6 is included because Module D's comparison runs it from
+        module-d-evaluation\tools\k6.exe -- inside the repo, so it matches.
     #>
     $escaped = [System.Management.Automation.WildcardPattern]::Escape($Root)
-    Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" -ErrorAction SilentlyContinue |
+    $filter = "Name = 'python.exe' OR Name = 'pythonw.exe' OR Name = 'k6.exe'"
+    Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -and $_.CommandLine -like "*$escaped*" -and $_.ProcessId -ne $PID }
 }
 
@@ -200,18 +234,19 @@ function Invoke-Teardown {
 
     # 1. Processes this run started, by recorded PID.
     $saved = Get-SavedPids
-    foreach ($key in @("dashboard", "policy")) {
+    foreach ($key in @("dashboard", "policy", "compare")) {
         if ($saved[$key]) { [void](Stop-ProcessSafely -ProcessId ([int]$saved[$key]) -Label $key) }
     }
     Remove-Item $PidFile -ErrorAction SilentlyContinue
 
-    # 2. Orphans: anything python running out of this repo that survived.
-    #    Catches windows closed by hand and processes left by earlier runs.
-    $orphans = @(Get-CasperPythonProcesses)
+    # 2. Orphans: anything python or k6 running out of this repo that
+    #    survived -- the comparison's child processes (reactive scaler, k6,
+    #    Module C's policy), windows closed by hand, earlier runs.
+    $orphans = @(Get-CasperProcesses)
     foreach ($orphan in $orphans) {
-        [void](Stop-ProcessSafely -ProcessId $orphan.ProcessId -Label "orphaned python")
+        [void](Stop-ProcessSafely -ProcessId $orphan.ProcessId -Label "orphaned $($orphan.Name)")
     }
-    if ($orphans.Count -eq 0) { Write-Info "no orphaned python processes" }
+    if ($orphans.Count -eq 0) { Write-Info "no orphaned python or k6 processes" }
 
     # 3. Anything still holding the dashboard port.
     $listeners = @(Get-NetTCPConnection -LocalPort $DashboardPort -State Listen -ErrorAction SilentlyContinue)
@@ -287,13 +322,22 @@ if ($Stop) {
 Write-Host "`nCASPER -- Civic-event-Aware Scheduling for Predictive Elastic Resources" -ForegroundColor White
 Write-Host "Starting the local demo" -ForegroundColor Gray
 
+# -Demo runs CASPER's predictive policy against the live stack; -Compare runs
+# the reactive baseline AND the predictive policy itself, one after the
+# other. Running both at once would put two brains on one knob and void the
+# experiment, so refuse up front rather than produce meaningless numbers.
+if ($Demo -and $Compare) {
+    Write-Host "`n-Demo and -Compare cannot run together: both drive the scaling knob.`n" -ForegroundColor Red
+    exit 1
+}
+
 # Clear out anything left over from a previous run before starting a new one,
 # so replicas and dashboards never stack up across runs.
-$leftovers = @(Get-CasperPythonProcesses)
+$leftovers = @(Get-CasperProcesses)
 if ($leftovers.Count -gt 0) {
     Write-Step "Found $($leftovers.Count) leftover process(es) from an earlier run"
     foreach ($leftover in $leftovers) {
-        [void](Stop-ProcessSafely -ProcessId $leftover.ProcessId -Label "leftover python")
+        [void](Stop-ProcessSafely -ProcessId $leftover.ProcessId -Label "leftover $($leftover.Name)")
     }
 }
 
@@ -335,6 +379,19 @@ Initialize-Venv -Directory $ModuleC -PythonPath $ModuleCPython -Label "Module C"
 if (-not $NoDashboard) {
     Initialize-Venv -Directory $Dashboard -PythonPath $DashboardPython -Label "dashboard"
 }
+if ($Demo) {
+    Initialize-Venv -Directory $ModuleA -PythonPath $ModuleAPython -Label "Module A"
+    Initialize-Venv -Directory $ModuleB -PythonPath $ModuleBPython -Label "Module B"
+}
+if ($Compare) {
+    Initialize-Venv -Directory $ModuleD -PythonPath $ModuleDPython -Label "Module D"
+    if (-not (Test-Path $K6Exe)) {
+        Write-Info "k6 missing -- fetching it into module-d-evaluation\tools (one time)"
+        & (Join-Path $ModuleD "tools\fetch_k6.ps1")
+        if (-not (Test-Path $K6Exe)) { throw "could not fetch k6" }
+    }
+    Write-Ok "k6 present"
+}
 
 # --- 3 & 4. Build and scale -----------------------------------------------
 Push-Location $ModuleC
@@ -365,10 +422,14 @@ try {
         if (Test-Port -Port $DashboardPort) {
             Write-Warn "port $DashboardPort is already in use -- reusing whatever is there"
         } else {
+            # During the experiment the dashboard's own latency probe would
+            # add traffic to the very thing being measured, so start it off.
+            if ($Compare) { $env:CASPER_DASH_PROBE = "0" }
             $proc = Start-Process -FilePath $DashboardPython `
                                   -ArgumentList "app.py" `
                                   -WorkingDirectory $Dashboard `
                                   -PassThru
+            Remove-Item Env:\CASPER_DASH_PROBE -ErrorAction SilentlyContinue
             $pids["dashboard"] = $proc.Id
             if (Wait-Port -Port $DashboardPort -TimeoutSeconds 30) {
                 Write-Ok "dashboard live on http://localhost:$DashboardPort (pid $($proc.Id))"
@@ -382,18 +443,51 @@ try {
         }
     }
 
-    # --- 6. Predictive policy ---------------------------------------------
+    # --- 6. The real pipeline: A -> B -> C --------------------------------
     if ($Demo) {
-        Write-Step "Scheduling the predictive policy"
-
         if ($DownIn -le $UpIn) {
             throw "-DownIn ($DownIn) must be greater than -UpIn ($UpIn)"
         }
 
+        Write-Step "Module A: validating the event dataset"
+        Push-Location $ModuleA
+        try {
+            & $ModuleAPython loader.py
+            if ($LASTEXITCODE -ne 0) { throw "Module A rejected the event dataset" }
+        } finally {
+            Pop-Location
+        }
+
+        Write-Step "Module B: estimating a Prediction for every event"
+        Push-Location $ModuleB
+        try {
+            & $ModuleBPython estimate.py (Join-Path $ModuleA "events.json")
+            if ($LASTEXITCODE -ne 0) { throw "Module B failed to produce predictions" }
+        } finally {
+            Pop-Location
+        }
+
+        $predictionFile = Join-Path $ModuleB "predictions\$EventId.json"
+        if (-not (Test-Path $predictionFile)) {
+            throw "Module B produced no prediction for '$EventId' -- is it an event_id in module-a-ingestion\events.json?"
+        }
+        $predicted = (Get-Content $predictionFile -Raw | ConvertFrom-Json).predicted_peak_replicas
+
+        Write-Step "Module C: scheduling B's prediction for $EventId"
+        # Real event dates are months away, so shift B's prediction to start in
+        # -UpIn seconds. Its replica count is B's, capped by -Peak for a laptop.
+        $shiftArgs = @("--source", $predictionFile, "--up-in", $UpIn, "--down-in", $DownIn)
+        if ($Peak -gt 0) {
+            $shiftArgs += @("--peak", $Peak)
+            Write-Info "Module B predicted $predicted replicas; capped to $Peak for this laptop (-Peak 0 to use B's number)"
+        } else {
+            $Peak = $predicted
+            Write-Info "using Module B's prediction unchanged: $predicted replicas"
+        }
+
         Push-Location $ModuleC
         try {
-            & $ModuleCPython (Join-Path $ModuleC "scripts\make_demo_prediction.py") `
-                --up-in $UpIn --down-in $DownIn --peak $Peak
+            & $ModuleCPython (Join-Path $ModuleC "scripts\make_demo_prediction.py") @shiftArgs
             if ($LASTEXITCODE -ne 0) { throw "could not write the demo prediction" }
         } finally {
             Pop-Location
@@ -408,6 +502,19 @@ try {
         Write-Info "scale UP in ~$UpIn s to $Peak replicas, scale DOWN in ~$DownIn s"
     }
 
+    # --- 7. Module D: the experiment --------------------------------------
+    if ($Compare) {
+        Write-Step "Module D: reactive vs predictive comparison"
+        & $ModuleDPython (Join-Path $ModuleD "run_comparison.py") --dry-run
+        $proc = Start-Process -FilePath $ModuleDPython `
+                              -ArgumentList "run_comparison.py" `
+                              -WorkingDirectory $ModuleD `
+                              -PassThru
+        $pids["compare"] = $proc.Id
+        Write-Ok "comparison running in its own window (pid $($proc.Id))"
+        Write-Info "results land in module-d-evaluation\results\ and on the dashboard when it finishes"
+    }
+
     Save-Pids -Pids $pids
 
     # --- Summary -----------------------------------------------------------
@@ -420,10 +527,15 @@ try {
     }
     Write-Host "  Audit log          : casper-module-c\logs\scale_actions.jsonl"
     if ($Demo) {
-        Write-Host "`n  Watch the dashboard: replicas appear while the timeline is still"
+        Write-Host "`n  Pipeline: A ($EventId) -> B prediction -> C policy."
+        Write-Host "  Watch the dashboard: replicas appear while the timeline is still"
         Write-Host "  in the 'before' phase -- capacity provisioned ahead of traffic."
+    } elseif ($Compare) {
+        Write-Host "`n  Experiment running (~9 min). Leave this window open; when the"
+        Write-Host "  comparison window finishes, the dashboard shows the result."
+        Write-Host "  Charts: module-d-evaluation\results\*.png"
     } else {
-        Write-Host "`n  Add -Demo to have the predictive policy scale up on its own."
+        Write-Host "`n  Add -Demo for the A->B->C pipeline, or -Compare for the experiment."
     }
     Write-Host "  Scale by hand      : casper-module-c\.venv\Scripts\python.exe casper-module-c\controller\scale_controller.py 5"
 

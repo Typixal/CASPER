@@ -139,21 +139,45 @@ The deliverable is "predicted event → planned action → executed action":
 
 ## 4. Notes for other modules
 
-### For whoever builds Module D (reactive baseline)
+### Per-replica capacity (what makes Module D's comparison meaningful)
 
-Import the shared controller and **always pass `source="reactive"`**:
+Each portal replica serves at most `MAX_CONCURRENT` requests at once (default
+**5**). A request that cannot get a slot waits up to `QUEUE_TIMEOUT_MS` (default
+**2000**), then gets a **503** `{"error": "replica at capacity"}`. Both are set
+in `docker-compose.yml`.
+
+5 concurrent at ~70 ms average work ≈ 70 req/s ≈ **4200 req/min per replica**,
+in line with the project's documented ~4000 req/min basis. Without the cap,
+every request just slept on its own thread, extra load barely moved latency,
+and a latency-driven reactive scaler had nothing to react to. `/health` and `/`
+are deliberately *not* gated — a busy replica is still healthy, and gating the
+healthcheck would get saturated replicas pulled out of nginx mid-spike.
+
+Tested on the host (no Docker needed):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/ -q
+```
+
+After changing the portal, rebuild the image: `docker compose build` (or
+`.\run-demo.ps1 -Build`).
+
+### Module D (reactive baseline) — how it uses this module
+
+Module D imports this controller (via `module-d-evaluation/module_c.py`,
+resolved from file location, not the working directory) and always passes
+**`source="reactive"`**:
 
 ```python
-from controller.scale_controller import scale_to, current_replica_count
-
 scale_to(5, source="reactive")
 ```
 
 That `source` tag is what lets the comparison separate "CASPER scaled this" from
 "the reactive baseline scaled this" in `logs/scale_actions.jsonl`. Importing
-`scale_controller` is side-effect free — nothing touches Docker at import time.
+`scale_controller` is side-effect free — nothing touches Docker at import time,
+and Module D has a test that holds it to that.
 
-k6 should target `http://localhost:8080/results` — the nginx entry point, never a
+k6 targets `http://localhost:8080/results` — the nginx entry point, never a
 portal container directly.
 
 ### For Module B

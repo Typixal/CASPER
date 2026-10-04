@@ -8,3 +8,6 @@
 # unreachable the page still renders correctly, falling back to system
 # sans/mono; nothing else is fetched at runtime.
 Flask==3.0.3
+
+# Development only: the collector test suite.
+pytest==8.3.3

@@ -18,6 +18,11 @@ services:
     environment:
       MIN_DELAY_MS: "20"
       MAX_DELAY_MS: "120"
+      # Per-replica capacity: 5 concurrent requests, queue up to 2s, then 503.
+      # ~4200 req/min per replica, matching the project's ~4000 basis. This is
+      # what makes an under-provisioned stack degrade like a real one.
+      MAX_CONCURRENT: "5"
+      QUEUE_TIMEOUT_MS: "2000"
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:5000/health"]
       interval: 5s

@@ -1,9 +1,10 @@
-import { Activity, FileCode2, History, PieChart, Server } from "lucide-react"
+import { Activity, FileCode2, FlaskConical, History, PieChart, Server } from "lucide-react"
 import Masthead from "./components/Masthead"
 import ErrorBanner from "./components/ErrorBanner"
 import StatRail from "./components/StatRail"
 import Panel from "./components/Panel"
 import AuditTable from "./components/AuditTable"
+import ComparisonPanel from "./components/ComparisonPanel"
 import NginxPanel from "./components/NginxPanel"
 import ModulePanel from "./components/ModulePanel"
 import PredictionRamp from "./components/charts/PredictionRamp"
@@ -82,7 +83,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* 5 — Where the rest of the system stands */}
+        {/* 5 — The experiment's answer (Module D) */}
+        <Panel icon={FlaskConical} title="Reactive vs predictive" tag="module d · same traffic, same knob" delay={0.32}>
+          <ComparisonPanel comparison={modules.d?.comparison} />
+        </Panel>
+
+        {/* 6 — Where the rest of the system stands */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <ModulePanel title="Module A — event dataset" module={modules.a} delay={0.35}>
             {modules.a?.built ? (
@@ -130,11 +136,13 @@ export default function App() {
             {modules.d?.built ? (
               <>
                 <div className="text-text">{modules.d.detail}</div>
-                {[...(modules.d.k6_scripts ?? []), ...(modules.d.results ?? [])].map((f) => (
-                  <div key={f} className="font-mono text-[11px]">
-                    {f}
+                {modules.d.comparison ? (
+                  <div>comparison ready — see the panel above</div>
+                ) : (
+                  <div>
+                    run <code className="font-mono text-text-muted">.un-demo.ps1 -Compare</code> to produce results
                   </div>
-                ))}
+                )}
               </>
             ) : (
               <>

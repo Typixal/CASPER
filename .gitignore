@@ -40,3 +40,12 @@ Desktop.ini
 
 # PIDs of the windows run-demo.ps1 started (local runtime state)
 .casper-demo.pid
+
+# --- Module D -------------------------------------------------------------
+# k6.exe is a downloaded binary, fetched by module-d-evaluation/tools/fetch_k6.ps1.
+module-d-evaluation/tools/*.exe
+module-d-evaluation/tools/*.zip
+# Raw k6 output (per-request CSVs run to megabytes) and scaler logs. The
+# summarised results -- comparison.json/.md and the charts -- ARE committed,
+# as evidence of a real run.
+module-d-evaluation/results/raw/

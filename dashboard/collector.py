@@ -474,9 +474,37 @@ def read_other_modules():
         )
         d["k6_scripts"] = [f.name for f in k6_scripts[:5]]
         d["results"] = [f.name for f in results[:5]]
+    d["comparison"] = read_comparison()
     modules["d"] = d
 
     return modules
+
+
+def read_comparison():
+    """Headline numbers from Module D's results/comparison.json, or None.
+
+    Only what the panel shows -- the full file also carries per-interval time
+    series, which would bloat every SSE push for no visible benefit. A
+    missing or half-written file (mid-run) returns None rather than breaking
+    the whole snapshot.
+    """
+    path = MODULE_D_RESULTS_DIR / "comparison.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        headline = {}
+        for name in ("reactive", "predictive"):
+            run = data["strategies"][name]
+            headline[name] = {
+                "p95_ms": run["summary"]["p95_ms"],
+                "error_rate": run["summary"]["error_rate"],
+                "success_pct": run["summary"]["success_pct"],
+                "replica_seconds": run["replica_seconds"],
+            }
+        headline["verdict"] = data["verdict"]
+        headline["p95_reduction_pct"] = data["p95_reduction_pct"]
+        return headline
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 # ---------------------------------------------------------------------------
