@@ -19,10 +19,11 @@ the tested Module C stack behaves exactly as before.
 
 import json
 import os
+import re
 import threading
 import time
 
-from flask import Flask, Response, jsonify, render_template
+from flask import Flask, Response, abort, jsonify, render_template, send_from_directory
 
 import collector
 
@@ -96,6 +97,22 @@ def api_probe_toggle():
         return jsonify({"probe_enabled": _probe_enabled, "locked": True}), 409
     _probe_enabled = not _probe_enabled
     return jsonify({"probe_enabled": _probe_enabled})
+
+
+# A bare file name ending in .png -- nothing else is servable from results/.
+_CHART_NAME = re.compile(r"^[A-Za-z0-9_\-]+\.png$")
+
+
+@app.route("/api/results/<path:name>")
+def api_result_chart(name):
+    """Module D's report charts (results/*.png), for the Experiment page.
+
+    Deliberately narrow: only a bare *.png name, only from the results
+    folder. The dashboard stays read-only and exposes no other files.
+    """
+    if not _CHART_NAME.match(name):
+        abort(404)
+    return send_from_directory(collector.MODULE_D_RESULTS_DIR, name, mimetype="image/png")
 
 
 @app.route("/stream")

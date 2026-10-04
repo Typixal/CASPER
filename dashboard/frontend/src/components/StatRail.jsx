@@ -2,6 +2,7 @@ import { motion } from "framer-motion"
 import { Gauge, ListChecks, Network, Server, Timer } from "lucide-react"
 import AnimatedNumber from "./AnimatedNumber"
 import { sourceColor, sourceLabel, timeOnly } from "../lib/format"
+import { term } from "../lib/terms"
 
 function StatTile({ icon: Icon, label, value, sub, accent = "text-text", index = 0 }) {
   return (
@@ -21,7 +22,8 @@ function StatTile({ icon: Icon, label, value, sub, accent = "text-text", index =
   )
 }
 
-export default function StatRail({ state }) {
+export default function StatRail({ state, technical = false }) {
+  const t = (plain, tech) => (technical ? tech : plain)
   const summary = state.summary ?? {}
   const probe = state.probe ?? {}
   const scaleLog = state.scale_log ?? {}
@@ -32,26 +34,34 @@ export default function StatRail({ state }) {
       <StatTile
         index={0}
         icon={Server}
-        label="replicas ready"
+        label={`${term("replicas", technical)} ready`}
         value={<AnimatedNumber value={summary.replicas_ready ?? null} />}
-        sub={`of ${summary.replicas_total ?? 0} containers`}
+        sub={`of ${summary.replicas_total ?? 0} ${t("started", "containers")}`}
         accent="text-green"
       />
       <StatTile
         index={1}
         icon={Network}
-        label="routed by nginx"
+        label={t("receiving visitors", "routed by nginx")}
         value={<AnimatedNumber value={summary.drained ? 0 : (summary.replicas_routed ?? null)} />}
-        sub={summary.drained ? "drained — nginx returns 502" : "upstream servers"}
+        sub={
+          summary.drained
+            ? t("none — the portal is turning visitors away", "drained — nginx returns 502")
+            : t("listed with the traffic director", "upstream servers")
+        }
         accent={summary.drained ? "text-danger" : "text-steel"}
       />
       <StatTile
         index={2}
         icon={Gauge}
-        label="last scaled by"
+        label={t("last changed by", "last scaled by")}
         value={
           <span className="text-[26px]">
-            {summary.last_source ? sourceLabel(summary.last_source) : "—"}
+            {summary.last_source
+              ? technical
+                ? sourceLabel(summary.last_source)
+                : term(summary.last_source)
+              : "—"}
           </span>
         }
         sub={scaleLog.last ? timeOnly(scaleLog.last.timestamp) : " "}
@@ -60,7 +70,7 @@ export default function StatRail({ state }) {
       <StatTile
         index={3}
         icon={Timer}
-        label="probe latency"
+        label={t("page load right now", "probe latency")}
         value={
           probe.ok ? (
             <>
@@ -73,14 +83,14 @@ export default function StatRail({ state }) {
             <span className="text-[26px] text-text-faint">off</span>
           )
         }
-        sub="dashboard probe, not k6"
+        sub={t("timed by the dashboard's test visitor", "dashboard probe, not k6")}
       />
       <StatTile
         index={4}
         icon={ListChecks}
-        label="scale actions"
+        label={t("changes recorded", "scale actions")}
         value={<AnimatedNumber value={scaleLog.total ?? null} />}
-        sub="in the audit log"
+        sub={t("every server change, logged", "in the audit log")}
       />
     </div>
   )

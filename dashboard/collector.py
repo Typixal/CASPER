@@ -516,6 +516,8 @@ def collect(probe_enabled=True):
     nginx = read_nginx_upstream()
     actions = read_scale_actions()
 
+    prediction = read_prediction()
+
     ready = [r for r in docker_state["replicas"] if r["ready"]]
     # A replica Docker says is healthy but nginx is not routing to means the
     # controller has not run since it appeared -- worth showing, since it is
@@ -536,7 +538,12 @@ def collect(probe_enabled=True):
         },
         "nginx": nginx,
         "scale_log": actions,
-        "prediction": read_prediction(),
+        "prediction": prediction,
+        "schedule": read_schedule(
+            demo_event_id=prediction.get("event_id")
+            if "demo" in (prediction.get("kind") or "")
+            else None
+        ),
         "probe": probe_portal(probe_enabled),
         "probe_summary": probe_summary(),
         "modules": read_other_modules(),
@@ -546,3 +553,60 @@ def collect(probe_enabled=True):
             "entrypoint": PORTAL_ENTRYPOINT,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Event schedule (Module A events joined with Module B forecasts)
+# ---------------------------------------------------------------------------
+def read_schedule(now=None, demo_event_id=None):
+    """Every event in Module A's dataset, in date order, with B's forecast.
+
+    Each row: event_id, board, event_type, date, registered_candidates,
+    predicted_peak_replicas / ramp_start / ramp_end (None when Module B has no
+    forecast for it), status ("past" | "upcoming" relative to `now`), and
+    demo (True for the event the live demo is replaying, time-shifted).
+
+    The dataset's dates are real calendar dates, so with today's clock most
+    are in the past -- shown honestly as "past" rather than re-dated.
+    """
+    now = now or datetime.now(timezone.utc)
+    try:
+        data = json.loads(MODULE_A_EVENTS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    events = data if isinstance(data, list) else data.get("events", [])
+
+    rows = []
+    for e in events:
+        try:
+            date = datetime.fromisoformat(e["date"])
+        except (KeyError, TypeError, ValueError):
+            continue  # Module A's loader rejects these; never crash the page
+
+        forecast = {}
+        path = MODULE_B_PREDICTIONS_DIR / "{}.json".format(e.get("event_id"))
+        try:
+            forecast = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+
+        rows.append(
+            {
+                "event_id": e.get("event_id"),
+                "board": e.get("board"),
+                "event_type": e.get("event_type"),
+                "date": e["date"],
+                "registered_candidates": e.get("registered_candidates"),
+                "predicted_peak_replicas": forecast.get("predicted_peak_replicas"),
+                "ramp_start": forecast.get("ramp_start"),
+                "ramp_end": forecast.get("ramp_end"),
+                "status": "past" if date < now else "upcoming",
+                "demo": e.get("event_id") == demo_event_id,
+                "_sort": date,
+            }
+        )
+
+    rows.sort(key=lambda r: r["_sort"])
+    for r in rows:
+        del r["_sort"]
+    return rows

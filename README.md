@@ -55,7 +55,7 @@ Each module has its own README with setup, run instructions and design notes.
 | **B** | Traffic-magnitude estimation — turns an Event into a Prediction. *Primary contribution* | 19 |
 | **C** | Shared scale controller (Docker + nginx), the predictive policy, the demo portal | 4 (portal) + live runs |
 | **D** | Reactive baseline scaler, k6 load test, reactive-vs-predictive comparison | 69 |
-| dashboard | Read-only live view of all of the above | 7 |
+| dashboard | Read-only live view of all of the above, in plain language: overview, event schedule, live system, experiment, how it works | 18 backend + 72 frontend |
 
 ```
 [Event Calendar Data] → INGESTION (A) → [Event + Metadata]
@@ -77,6 +77,7 @@ Every module was built test-first. Run all suites from the repo root:
 foreach ($m in "module-a-ingestion","module-b-estimation","casper-module-c","module-d-evaluation","dashboard") {
     & ".\$m\.venv\Scripts\python.exe" -m pytest ".\$m\tests" -q
 }
+cd dashboard\frontend; npm test; cd ..\..        # the dashboard's UI tests (vitest)
 ```
 
 ---

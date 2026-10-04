@@ -49,3 +49,7 @@ module-d-evaluation/tools/*.zip
 # summarised results -- comparison.json/.md and the charts -- ARE committed,
 # as evidence of a real run.
 module-d-evaluation/results/raw/
+
+# In-project npm cache (see dashboard/frontend/.npmrc)
+dashboard/frontend/.npm-cache/
+dashboard/frontend/screenshots/

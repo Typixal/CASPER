@@ -22,7 +22,7 @@ function EmptyState({ icon: Icon, children }) {
   )
 }
 
-export default function ReplicaGrid({ docker, probeSummary }) {
+export default function ReplicaGrid({ docker, probeSummary, technical = false }) {
   if (!docker?.available) {
     return <EmptyState icon={ServerOff}>Docker not reachable — is Docker Desktop running?</EmptyState>
   }
@@ -61,7 +61,9 @@ export default function ReplicaGrid({ docker, probeSummary }) {
                   strokeWidth={2.4}
                   className={`${status.color} ${classify(r) === "starting" ? "animate-spin" : ""}`}
                 />
-                <span className="truncate text-sm font-semibold text-text">portal-{r.short_name}</span>
+                <span className="truncate text-sm font-semibold text-text">
+                  {technical ? `portal-${r.short_name}` : `server ${r.short_name}`}
+                </span>
               </div>
 
               <div className="mt-1.5 text-[11px] text-text-faint">
@@ -75,13 +77,19 @@ export default function ReplicaGrid({ docker, probeSummary }) {
                 }
               >
                 <PlugZap size={12} strokeWidth={2.4} />
-                {r.routed ? "in nginx upstream" : "not in nginx"}
+                {technical
+                  ? r.routed
+                    ? "in nginx upstream"
+                    : "not in nginx"
+                  : r.routed
+                    ? "receiving visitors"
+                    : "not receiving visitors yet"}
               </div>
 
-              <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-[10.5px] text-text-faint">
-                <span className="font-mono">{r.id || "?"}</span>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 border-t border-border/60 pt-2 text-[10.5px] text-text-faint">
+                {technical && <span className="truncate font-mono">{r.id || "?"}</span>}
                 <span className="tnum">
-                  {hitCount} hit{hitCount === 1 ? "" : "s"}
+                  {hitCount} {technical ? `hit${hitCount === 1 ? "" : "s"}` : `test visit${hitCount === 1 ? "" : "s"}`}
                 </span>
               </div>
             </motion.article>

@@ -1,170 +1,93 @@
-import { Activity, FileCode2, FlaskConical, History, PieChart, Server } from "lucide-react"
-import Masthead from "./components/Masthead"
+import { useEffect, useState } from "react"
 import ErrorBanner from "./components/ErrorBanner"
-import StatRail from "./components/StatRail"
-import Panel from "./components/Panel"
-import AuditTable from "./components/AuditTable"
-import ComparisonPanel from "./components/ComparisonPanel"
-import NginxPanel from "./components/NginxPanel"
-import ModulePanel from "./components/ModulePanel"
-import PredictionRamp from "./components/charts/PredictionRamp"
-import ScaleTimeline from "./components/charts/ScaleTimeline"
-import LatencyChart from "./components/charts/LatencyChart"
-import ReplicaGrid from "./components/charts/ReplicaGrid"
-import SourceSplitBar from "./components/charts/SourceSplitBar"
+import Sidebar from "./components/Sidebar"
+import { PAGES } from "./lib/pages"
+import ExperimentPage from "./pages/ExperimentPage"
+import HowItWorksPage from "./pages/HowItWorksPage"
+import LivePage from "./pages/LivePage"
+import OverviewPage from "./pages/OverviewPage"
+import SchedulePage from "./pages/SchedulePage"
 import { useLiveState, useProbeToggle } from "./lib/useLiveState"
+
+const PAGE_IDS = PAGES.map((p) => p.id)
+const TECHNICAL_KEY = "casper.technical"
+
+// The page lives in the URL hash, so a refresh -- or the browser's back
+// button -- keeps your place during a demo.
+function pageFromHash() {
+  const id = window.location.hash.replace(/^#/, "")
+  return PAGE_IDS.includes(id) ? id : "overview"
+}
+
+// localStorage can be blocked (private windows, strict settings). The switch
+// is a convenience; losing it must never break the page.
+function readTechnical() {
+  try {
+    return localStorage.getItem(TECHNICAL_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+function writeTechnical(value) {
+  try {
+    localStorage.setItem(TECHNICAL_KEY, value ? "1" : "0")
+  } catch {
+    /* storage blocked -- keep working without persistence */
+  }
+}
 
 export default function App() {
   const { state, connected } = useLiveState()
-  const { toggle, pending } = useProbeToggle()
+  const { toggle: toggleProbe, pending: probePending } = useProbeToggle()
+  const [page, setPage] = useState(pageFromHash)
+  const [technical, setTechnical] = useState(readTechnical)
 
-  const modules = state.modules ?? {}
-  const probeEnabled = state.probe?.enabled ?? true
+  useEffect(() => {
+    const onHashChange = () => setPage(pageFromHash())
+    window.addEventListener("hashchange", onHashChange)
+    return () => window.removeEventListener("hashchange", onHashChange)
+  }, [])
+
+  function navigate(id) {
+    window.location.hash = id
+    setPage(id)
+    window.scrollTo?.({ top: 0 })
+  }
+
+  function toggleTechnical() {
+    setTechnical((current) => {
+      writeTechnical(!current)
+      return !current
+    })
+  }
+
+  const comparison = state.modules?.d?.comparison ?? null
 
   return (
-    <div className="min-h-screen">
-      <Masthead
-        entrypoint={state.paths?.entrypoint}
+    <div className="min-h-screen lg:flex">
+      <Sidebar
+        page={page}
+        onNavigate={navigate}
+        technical={technical}
+        onToggleTechnical={toggleTechnical}
         connected={connected}
-        probeEnabled={probeEnabled}
-        probeLocked={state.probe?.locked ?? false}
-        onToggleProbe={toggle}
-        probePending={pending}
       />
 
-      <main className="mx-auto max-w-[1600px] space-y-5 px-5 py-5">
-        <ErrorBanner state={state} />
-
-        {/* 1 — The claim: CASPER knows what's coming and when it will act */}
-        <PredictionRamp
-          prediction={state.prediction}
-          currentReplicas={state.summary?.replicas_ready}
-        />
-
-        {/* 2 — The numbers behind it */}
-        <StatRail state={state} />
-
-        {/* 3 — The proof: capacity moved, and who moved it */}
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-          <Panel
-            icon={History}
-            title="Capacity over time"
-            tag="oldest → newest"
-            className="xl:col-span-2"
-            delay={0.1}
-          >
-            <ScaleTimeline scaleLog={state.scale_log} />
-            <AuditTable actions={state.scale_log?.actions} />
-          </Panel>
-
-          <Panel icon={Server} title="Portal replicas" tag="live from docker" delay={0.15}>
-            <ReplicaGrid docker={state.docker} probeSummary={state.probe_summary} />
-          </Panel>
-        </div>
-
-        {/* 4 — What the traffic actually experienced */}
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-          <Panel
-            icon={Activity}
-            title="Probe latency"
-            tag="dashboard's own request · not k6"
-            className="xl:col-span-2"
-            delay={0.2}
-          >
-            <LatencyChart probeSummary={state.probe_summary} probeEnabled={probeEnabled} />
-          </Panel>
-
-          <div className="space-y-5">
-            <Panel icon={PieChart} title="Who scaled it" tag="all-time" delay={0.25}>
-              <SourceSplitBar scaleLog={state.scale_log} />
-            </Panel>
-            <Panel icon={FileCode2} title="nginx upstream" tag="generated config" delay={0.3}>
-              <NginxPanel nginx={state.nginx} />
-            </Panel>
+      <main className="min-w-0 flex-1 px-5 py-6 sm:px-8 lg:py-8">
+        <div className="mx-auto max-w-350">
+          <div className="mb-5">
+            <ErrorBanner state={state} />
           </div>
+
+          {page === "overview" && <OverviewPage state={state} technical={technical} onNavigate={navigate} />}
+          {page === "schedule" && <SchedulePage schedule={state.schedule} technical={technical} />}
+          {page === "live" && (
+            <LivePage state={state} technical={technical} onToggleProbe={toggleProbe} probePending={probePending} />
+          )}
+          {page === "experiment" && <ExperimentPage comparison={comparison} technical={technical} />}
+          {page === "how" && <HowItWorksPage />}
         </div>
-
-        {/* 5 — The experiment's answer (Module D) */}
-        <Panel icon={FlaskConical} title="Reactive vs predictive" tag="module d · same traffic, same knob" delay={0.32}>
-          <ComparisonPanel comparison={modules.d?.comparison} />
-        </Panel>
-
-        {/* 6 — Where the rest of the system stands */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <ModulePanel title="Module A — event dataset" module={modules.a} delay={0.35}>
-            {modules.a?.built ? (
-              <>
-                <div className="text-text">{modules.a.detail}</div>
-                {(modules.a.events ?? []).map((e) => (
-                  <div key={e.event_id} className="flex justify-between font-mono text-[11px]">
-                    <span>{e.event_id}</span>
-                    <span className="tnum text-text-faint">{e.registered_candidates}</span>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <>
-                <div>
-                  expects <code className="font-mono text-text-muted">module-a-ingestion/events.json</code>
-                </div>
-                <div>lights up on its own once that file exists</div>
-              </>
-            )}
-          </ModulePanel>
-
-          <ModulePanel title="Module B — estimation model" module={modules.b} delay={0.4}>
-            {modules.b?.built ? (
-              <>
-                <div className="text-text">{modules.b.detail}</div>
-                {(modules.b.files ?? []).map((f) => (
-                  <div key={f} className="font-mono text-[11px]">
-                    {f}
-                  </div>
-                ))}
-              </>
-            ) : (
-              <>
-                <div>
-                  expects{" "}
-                  <code className="font-mono text-text-muted">module-b-estimation/predictions/*.json</code>
-                </div>
-                <div>Module C is running on its hand-authored sample Prediction</div>
-              </>
-            )}
-          </ModulePanel>
-
-          <ModulePanel title="Module D — reactive baseline & k6" module={modules.d} delay={0.45}>
-            {modules.d?.built ? (
-              <>
-                <div className="text-text">{modules.d.detail}</div>
-                {modules.d.comparison ? (
-                  <div>comparison ready — see the panel above</div>
-                ) : (
-                  <div>
-                    run <code className="font-mono text-text-muted">.\run-demo.ps1 -Compare</code> to produce results
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div>
-                  expects <code className="font-mono text-text-muted">module-d-evaluation/</code> k6 scripts
-                  and results
-                </div>
-                <div>
-                  its actions will appear above tagged{" "}
-                  <span className="font-semibold text-amber">reactive</span>
-                </div>
-              </>
-            )}
-          </ModulePanel>
-        </div>
-
-        <footer className="pb-6 pt-1 text-[11px] leading-relaxed text-text-faint">
-          Read-only view — the dashboard never scales anything. It reads Docker state,{" "}
-          <code className="font-mono">nginx/nginx.conf</code>,{" "}
-          <code className="font-mono">logs/scale_actions.jsonl</code> and the active Prediction.
-        </footer>
       </main>
     </div>
   )
