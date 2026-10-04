@@ -93,10 +93,13 @@ Only the headline numbers travel over SSE — the file's per-interval time serie
 stays on disk. A missing or half-written file (mid-run) shows the placeholder
 rather than breaking the page.
 
-`-Compare` starts the dashboard with its latency probe **off**, so the
-dashboard adds no traffic to the measurement.
+`-Compare` starts the dashboard with its latency probe **off and locked**
+(`CASPER_DASH_PROBE=0`, `CASPER_DASH_PROBE_LOCKED=1`): the toggle endpoint
+returns 409 and the masthead button reads "probe locked off". Off alone was not
+enough — one click turned it back on mid-run and added the dashboard's own
+requests to the traffic being measured.
 
-Collector tests: `.\.venv\Scripts\python.exe -m pytest tests/ -q`
+Tests (collector + probe controls): `.\.venv\Scripts\python.exe -m pytest tests/ -q`
 
 ---
 

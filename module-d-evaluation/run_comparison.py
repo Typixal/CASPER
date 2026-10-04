@@ -223,6 +223,8 @@ def main():
     parser = argparse.ArgumentParser(description="CASPER: reactive vs predictive comparison")
     parser.add_argument("--dry-run", action="store_true", help="print the plan and exit")
     parser.add_argument("--peak-rps", type=int, default=250)
+    parser.add_argument("--hold", action="store_true",
+                        help="wait for Enter before exiting (used by run-demo.ps1's window)")
     args = parser.parse_args()
 
     plan = make_plan(peak_rps=args.peak_rps)
@@ -237,15 +239,16 @@ def main():
     return 0
 
 
-def _hold_window_open():
-    # run-demo.ps1 -Compare starts this in its own console window, which
-    # would otherwise vanish the instant the run ends -- taking the result,
-    # or the error explaining a failure, with it.
-    if sys.stdin is not None and sys.stdin.isatty():
-        try:
-            input("\nPress Enter to close this window.")
-        except EOFError:
-            pass
+def should_hold_window(argv):
+    """Only when explicitly asked (--hold).
+
+    run-demo.ps1 starts the real run in its own console window with --hold,
+    so the result -- or the error explaining a failure -- stays on screen
+    instead of vanishing the instant the run ends. Everywhere else (the
+    launcher's inline --dry-run, a run from your own terminal) it must not
+    stop and wait for Enter.
+    """
+    return "--hold" in argv
 
 
 if __name__ == "__main__":
@@ -256,5 +259,9 @@ if __name__ == "__main__":
 
         traceback.print_exc()
         code = 1
-    _hold_window_open()
+    if should_hold_window(sys.argv[1:]):
+        try:
+            input("\nPress Enter to close this window.")
+        except EOFError:
+            pass
     sys.exit(code)

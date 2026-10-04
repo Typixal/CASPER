@@ -54,8 +54,8 @@ Each module has its own README with setup, run instructions and design notes.
 | **A** | Offline civic-event dataset (synthetic sample data) + validating loader | 17 |
 | **B** | Traffic-magnitude estimation — turns an Event into a Prediction. *Primary contribution* | 19 |
 | **C** | Shared scale controller (Docker + nginx), the predictive policy, the demo portal | 4 (portal) + live runs |
-| **D** | Reactive baseline scaler, k6 load test, reactive-vs-predictive comparison | 67 |
-| dashboard | Read-only live view of all of the above | 4 (collector) |
+| **D** | Reactive baseline scaler, k6 load test, reactive-vs-predictive comparison | 69 |
+| dashboard | Read-only live view of all of the above | 7 |
 
 ```
 [Event Calendar Data] → INGESTION (A) → [Event + Metadata]
@@ -148,6 +148,20 @@ the comparison to `module-d-evaluation\results\` (JSON, a markdown table for the
 report, and charts) and to the dashboard. About 9 minutes. See
 [module-d-evaluation/README.md](module-d-evaluation/README.md).
 
+**Result** (two independent runs, which agreed to within 1 ms on p95):
+
+| | Reactive baseline | CASPER predictive |
+|---|---|---|
+| p95 response time | 2063 ms | **121 ms** (−94.2%) |
+| error rate | 5.18% | **0.00%** |
+| successful requests | 93.90% | **100.00%** |
+| replica-seconds (cost) | **623** | 706 |
+
+CASPER had its 4 replicas up 14 s *before* the traffic ramp; the reactive
+baseline reached 3 replicas 21 s and 5 replicas 42 s *after* it. CASPER pays
+for that with ~13% more replica-time — capacity that sat ready before it was
+needed.
+
 ### Other options
 
 ```powershell
@@ -167,9 +181,11 @@ drive the scaling knob, and two brains on one knob would void the experiment.
 **It cleans up after itself.** The script stays in the foreground; press Ctrl+C
 and it stops the dashboard, the policy, the comparison, every k6 run and
 reactive scaler it started, and every container. Teardown also sweeps orphans
-— any python or k6 process running out of this repo, plus whatever holds port
-8050 — so a window closed by hand last time does not linger. It never touches
-processes from anywhere else on the machine. Startup runs the same sweep first,
+— any python running one of CASPER's own scripts from this repo, any k6 from
+`module-d-evaluation\tools`, plus whatever holds port 8050 — so a window closed
+by hand last time does not linger. It deliberately matches CASPER's entry-point
+scripts, not just "anything running from this repo": an editor extension (e.g.
+VS Code's Black formatter) running from a project venv is left alone. Startup runs the same sweep first,
 so repeated runs never stack up.
 
 Closing the window with the X button instead of Ctrl+C kills the script without

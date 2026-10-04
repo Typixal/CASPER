@@ -27,6 +27,7 @@ export default function App() {
         entrypoint={state.paths?.entrypoint}
         connected={connected}
         probeEnabled={probeEnabled}
+        probeLocked={state.probe?.locked ?? false}
         onToggleProbe={toggle}
         probePending={pending}
       />
@@ -140,7 +141,7 @@ export default function App() {
                   <div>comparison ready — see the panel above</div>
                 ) : (
                   <div>
-                    run <code className="font-mono text-text-muted">.un-demo.ps1 -Compare</code> to produce results
+                    run <code className="font-mono text-text-muted">.\run-demo.ps1 -Compare</code> to produce results
                   </div>
                 )}
               </>

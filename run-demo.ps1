@@ -196,21 +196,34 @@ function Get-SavedPids {
 # ---------------------------------------------------------------------------
 # Teardown
 # ---------------------------------------------------------------------------
+# CASPER's own entry points. Only processes running one of these are ever
+# swept. "Any python whose command line mentions this repo" was too broad: an
+# IDE extension (VS Code's Black formatter, a language server) running from a
+# project venv matches that too, and the sweep killed it.
+$CasperScripts = '(app|predictive_policy|reactive_baseline|run_comparison|scale_controller|loader|estimate|make_demo_prediction)\.py'
+
 function Get-CasperProcesses {
     <#
-        Every python or k6 process whose command line points inside THIS repo.
+        CASPER's own python and k6 processes, and nothing else.
 
-        Matching on the command line rather than just the image name is what
-        makes this safe: an unrelated python doing real work on this machine
-        is never touched, and a dashboard, policy, reactive scaler or k6 run
-        whose window was closed by hand (so its PID file entry is stale) is
-        still found. k6 is included because Module D's comparison runs it from
-        module-d-evaluation\tools\k6.exe -- inside the repo, so it matches.
+        A process qualifies only if its command line points inside THIS repo
+        AND runs one of CASPER's entry-point scripts -- or it is the k6.exe
+        that lives in module-d-evaluation\tools. That still finds a dashboard,
+        policy, reactive scaler or comparison whose window was closed by hand
+        (PID file entry stale), while leaving editors, formatters, language
+        servers and anything else on the machine alone -- even when they run
+        from one of this project's venvs.
     #>
     $escaped = [System.Management.Automation.WildcardPattern]::Escape($Root)
+    $k6Escaped = [System.Management.Automation.WildcardPattern]::Escape($ModuleD)
     $filter = "Name = 'python.exe' OR Name = 'pythonw.exe' OR Name = 'k6.exe'"
     Get-CimInstance Win32_Process -Filter $filter -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine -like "*$escaped*" -and $_.ProcessId -ne $PID }
+        Where-Object {
+            $_.ProcessId -ne $PID -and $_.CommandLine -and (
+                ($_.Name -eq 'k6.exe' -and $_.ExecutablePath -like "$k6Escaped*") -or
+                ($_.CommandLine -like "*$escaped*" -and $_.CommandLine -match $CasperScripts)
+            )
+        }
 }
 
 function Stop-ProcessSafely {
@@ -423,13 +436,19 @@ try {
             Write-Warn "port $DashboardPort is already in use -- reusing whatever is there"
         } else {
             # During the experiment the dashboard's own latency probe would
-            # add traffic to the very thing being measured, so start it off.
-            if ($Compare) { $env:CASPER_DASH_PROBE = "0" }
+            # add traffic to the very thing being measured, so start it off
+            # AND locked -- off alone was undone by one click on the masthead
+            # button mid-run.
+            if ($Compare) {
+                $env:CASPER_DASH_PROBE = "0"
+                $env:CASPER_DASH_PROBE_LOCKED = "1"
+            }
             $proc = Start-Process -FilePath $DashboardPython `
                                   -ArgumentList "app.py" `
                                   -WorkingDirectory $Dashboard `
                                   -PassThru
             Remove-Item Env:\CASPER_DASH_PROBE -ErrorAction SilentlyContinue
+            Remove-Item Env:\CASPER_DASH_PROBE_LOCKED -ErrorAction SilentlyContinue
             $pids["dashboard"] = $proc.Id
             if (Wait-Port -Port $DashboardPort -TimeoutSeconds 30) {
                 Write-Ok "dashboard live on http://localhost:$DashboardPort (pid $($proc.Id))"
@@ -507,7 +526,7 @@ try {
         Write-Step "Module D: reactive vs predictive comparison"
         & $ModuleDPython (Join-Path $ModuleD "run_comparison.py") --dry-run
         $proc = Start-Process -FilePath $ModuleDPython `
-                              -ArgumentList "run_comparison.py" `
+                              -ArgumentList @("run_comparison.py", "--hold") `
                               -WorkingDirectory $ModuleD `
                               -PassThru
         $pids["compare"] = $proc.Id

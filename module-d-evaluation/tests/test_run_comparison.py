@@ -144,3 +144,17 @@ def test_dry_run_describes_the_plan_without_touching_anything():
 
     assert "250" in text
     assert "reactive" in text and "predictive" in text
+
+
+def test_the_window_is_not_held_open_by_default():
+    # run-demo.ps1 runs a --dry-run inline in ITS OWN console before
+    # launching the real run. Holding there would block the launcher on an
+    # "Press Enter" prompt nobody asked for.
+    assert rc.should_hold_window(["--dry-run"]) is False
+    assert rc.should_hold_window([]) is False
+
+
+def test_the_window_is_held_open_only_when_asked():
+    # The launcher passes --hold to the real run it starts in a new window,
+    # so the result (or the error) stays on screen.
+    assert rc.should_hold_window(["--hold"]) is True

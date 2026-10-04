@@ -25,8 +25,10 @@ The one-command way, from the repo root (needs Docker running):
 ```
 
 That creates the venv, fetches k6 if missing, starts the stack and dashboard
-(with the dashboard's own latency probe **off**, so it adds no traffic to the
-measurement), and runs the comparison in its own window. About 9 minutes.
+(with the dashboard's own latency probe **off and locked** — the toggle returns
+409 for the whole run, so no click can add the dashboard's traffic to the
+measurement), and runs the comparison in its own window, which stays open on
+the result. About 9 minutes.
 Ctrl+C in the launcher window cleans everything up — scalers, k6, containers.
 
 By hand:
@@ -112,6 +114,30 @@ alone. 20 s covers the time new containers take to pass their healthcheck.
 
 ---
 
+## Result
+
+Two independent runs, which agreed to within 1 ms on p95:
+
+| Metric | Reactive | Predictive (CASPER) |
+|---|---|---|
+| p95 response time | 2063 ms | **121 ms** |
+| median response time | 91 ms | 75 ms |
+| error rate | 5.18% | **0.00%** |
+| successful requests | 93.90% | **100.00%** |
+| dropped (never sent) | 311 | 0 |
+| replica-seconds (cost) | **623** | 706 |
+
+**p95 reduction with CASPER: 94.2%.**
+
+The traffic ramp starts at 45 s. CASPER had 4 replicas healthy at **31 s**.
+The reactive baseline reached 3 replicas at 66 s and 5 at 87 s, and its p95 sat
+above 2 s for the ~40 s in between. The cost: CASPER used ~13% more
+replica-seconds, because its capacity was ready before it was needed.
+
+Calibration check (one replica vs four at the 250 req/s peak): 1 replica gave
+p95 2101 ms with 66% errors, 4 replicas gave p95 121 ms with 0% errors. So the
+capacity cap behaves as designed, and 4 is the right number for this peak.
+
 ## Output
 
 ```
@@ -145,7 +171,7 @@ six records, so it stays stdlib-only. Each module uses the tool its job needs.
 
 ## Tests
 
-Built test-first: **67 tests**, each written and watched fail before the code
+Built test-first: **69 tests**, each written and watched fail before the code
 that satisfies it. No mocks.
 
 ```powershell
@@ -180,7 +206,7 @@ module-d-evaluation/
 ├── charts.py              matplotlib charts for the report
 ├── module_c.py            bridge to Module C's real scale controller
 ├── tools/fetch_k6.ps1     downloads a pinned k6.exe into tools/ (nothing system-wide)
-├── tests/                 67 tests + real k6 fixtures
+├── tests/                 69 tests + real k6 fixtures
 ├── results/               output (raw/ is gitignored)
 └── requirements.txt       pandas, matplotlib, pytest (pyparsing pinned — see file)
 ```
