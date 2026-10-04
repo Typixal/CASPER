@@ -67,6 +67,13 @@
     Run Module D's reactive-vs-predictive experiment (~9 minutes) instead of
     the live demo. Cannot be combined with -Demo.
 
+.PARAMETER PeakRps
+    With -Compare: peak requests per second in the traffic curve. Default 250
+    (CASPER plans 4 servers). 400 needs 6. The reactive scaler's ceiling is
+    raised to match CASPER's whenever CASPER plans more than 6, so heavier
+    load stays a fair test. Above 400 the laptop itself starts to be the
+    bottleneck; the script warns.
+
 .PARAMETER NoDashboard
     Skip the dashboard.
 
@@ -82,6 +89,11 @@
 
 .PARAMETER Stop
     Don't launch anything -- just tear down whatever is currently running.
+
+.EXAMPLE
+    .\run-demo.ps1
+    No arguments: a menu asks what to run (live demo, experiment and its
+    load, just start, or stop), then confirms before doing anything.
 
 .EXAMPLE
     .\run-demo.ps1 -Demo
@@ -110,6 +122,7 @@ param(
     [int]$Peak = 4,
     [string]$EventId = "cbse_class12_2026",
     [switch]$Compare,
+    [int]$PeakRps = 250,
     [switch]$NoDashboard,
     [switch]$NoBrowser,
     [switch]$Detach,
@@ -321,6 +334,26 @@ function Initialize-Venv {
 }
 
 # ===========================================================================
+# No arguments: ask what to run
+# ===========================================================================
+. (Join-Path $Root "launcher\menu.ps1")
+
+# Any flag skips the menu, so scripted runs behave exactly as before. A
+# redirected stdin (no one at the keyboard) skips it too, rather than hang.
+if ($PSBoundParameters.Count -eq 0 -and -not [Console]::IsInputRedirected) {
+    $menu = Invoke-LauncherMenu -Events @(Get-MenuEvents -EventsPath (Join-Path $ModuleA "events.json"))
+    if (-not $menu.Go) {
+        Write-Host "`nNothing started.`n" -ForegroundColor Gray
+        exit 0
+    }
+    switch ($menu.Mode) {
+        "Demo"    { $Demo = [switch]$true; $EventId = $menu.EventId; $Peak = $menu.Peak }
+        "Compare" { $Compare = [switch]$true; $PeakRps = $menu.PeakRps }
+        "Stop"    { $Stop = [switch]$true }
+    }
+}
+
+# ===========================================================================
 # Shutdown-only path
 # ===========================================================================
 if ($Stop) {
@@ -524,9 +557,11 @@ try {
     # --- 7. Module D: the experiment --------------------------------------
     if ($Compare) {
         Write-Step "Module D: reactive vs predictive comparison"
-        & $ModuleDPython (Join-Path $ModuleD "run_comparison.py") --dry-run
+        & $ModuleDPython (Join-Path $ModuleD "run_comparison.py") --dry-run --peak-rps $PeakRps
+        $loadWarning = Get-LoadWarning -PeakRps $PeakRps
+        if ($loadWarning) { Write-Warn $loadWarning }
         $proc = Start-Process -FilePath $ModuleDPython `
-                              -ArgumentList @("run_comparison.py", "--hold") `
+                              -ArgumentList @("run_comparison.py", "--hold", "--peak-rps", $PeakRps) `
                               -WorkingDirectory $ModuleD `
                               -PassThru
         $pids["compare"] = $proc.Id

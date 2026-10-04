@@ -35,7 +35,8 @@ k6 binary are fetched once, up front.
 
 ```
 CASPER/
-├── run-demo.ps1              One-command launcher: demo, experiment, cleanup
+├── run-demo.ps1              One-command launcher: menu, demo, experiment, cleanup
+├── launcher/                 The launcher's interactive menu + its Pester tests
 ├── module-a-ingestion/       Module A — event dataset + loader
 ├── module-b-estimation/      Module B — traffic-magnitude estimation model
 ├── casper-module-c/          Module C — scale controller + predictive scheduler
@@ -54,7 +55,7 @@ Each module has its own README with setup, run instructions and design notes.
 | **A** | Offline civic-event dataset (synthetic sample data) + validating loader | 17 |
 | **B** | Traffic-magnitude estimation — turns an Event into a Prediction. *Primary contribution* | 19 |
 | **C** | Shared scale controller (Docker + nginx), the predictive policy, the demo portal | 4 (portal) + live runs |
-| **D** | Reactive baseline scaler, k6 load test, reactive-vs-predictive comparison | 69 |
+| **D** | Reactive baseline scaler, k6 load test, reactive-vs-predictive comparison | 74 |
 | dashboard | Read-only live view of all of the above, in plain language: overview, event schedule, live system, experiment, how it works | 18 backend + 72 frontend |
 
 ```
@@ -78,6 +79,7 @@ foreach ($m in "module-a-ingestion","module-b-estimation","casper-module-c","mod
     & ".\$m\.venv\Scripts\python.exe" -m pytest ".\$m\tests" -q
 }
 cd dashboard\frontend; npm test; cd ..\..        # the dashboard's UI tests (vitest)
+Invoke-Pester .\launcher                          # the launcher's menu (Pester, ships with Windows)
 ```
 
 ---
@@ -125,6 +127,16 @@ BIOS), Python 3.10+ on PATH. Everything else — virtual environments, pip
 caches, the k6 binary — is created **inside the project folder** on first use.
 Nothing is installed system-wide.
 
+### The menu — easiest way in
+
+```powershell
+.\run-demo.ps1
+```
+
+With no arguments the script asks what to run: the live demo (and which event),
+the experiment (and how much traffic), just the stack and dashboard, or stop
+everything. It confirms before doing anything. Any flag below skips the menu.
+
 ### The live demo — the whole pipeline
 
 ```powershell
@@ -166,7 +178,8 @@ needed.
 ### Other options
 
 ```powershell
-.\run-demo.ps1                                       # stack + dashboard, nothing scheduled
+.\run-demo.ps1 -NoBrowser                            # stack + dashboard, nothing scheduled
+.\run-demo.ps1 -Compare -PeakRps 400                 # the experiment under heavier traffic
 .\run-demo.ps1 -Demo -EventId ssc_cgl_result_2026    # a different event from Module A
 .\run-demo.ps1 -Demo -Peak 0                         # use Module B's replica count unchanged
 .\run-demo.ps1 -Demo -UpIn 20 -DownIn 120 -Peak 4    # custom timings
@@ -178,6 +191,11 @@ needed.
 `-Peak` defaults to 4: Module B's real estimates (12–20 replicas) are a lot of
 containers for a laptop. `-Demo` and `-Compare` refuse to run together — both
 drive the scaling knob, and two brains on one knob would void the experiment.
+
+`-PeakRps` (default 250) sets the experiment's peak traffic; 400 needs 6
+servers. When CASPER plans more than the reactive scaler's usual ceiling of 6,
+that ceiling rises to match, so heavier load stays a fair test. Above 400 req/s
+the laptop becomes the bottleneck and the script warns.
 
 **It cleans up after itself.** The script stays in the foreground; press Ctrl+C
 and it stops the dashboard, the policy, the comparison, every k6 run and
