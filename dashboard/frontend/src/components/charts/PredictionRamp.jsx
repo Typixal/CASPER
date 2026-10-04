@@ -2,11 +2,15 @@ import { motion } from "framer-motion"
 import { AlertCircle, CalendarClock, Flame, MoveDown, MoveUp, ShieldCheck, Timer } from "lucide-react"
 import AnimatedNumber from "../AnimatedNumber"
 import { clamp, timeOnly } from "../../lib/format"
+import { eventName } from "../../lib/narrative"
+import { term } from "../../lib/terms"
 
 const PHASE = {
   before: {
     label: "before ramp",
+    plain: "getting ready",
     blurb: "capacity provisioned ahead of traffic",
+    plainBlurb: "servers are added before the students arrive",
     icon: CalendarClock,
     text: "text-text-muted",
     ring: "border-border-bright bg-panel",
@@ -15,7 +19,9 @@ const PHASE = {
   },
   ramp: {
     label: "inside event window",
+    plain: "rush starting",
     blurb: "traffic climbing — capacity already in place",
+    plainBlurb: "visitors are pouring in — the extra servers are already running",
     icon: MoveUp,
     text: "text-steel",
     ring: "border-steel/50 bg-steel/10",
@@ -24,7 +30,9 @@ const PHASE = {
   },
   peak: {
     label: "past predicted peak",
+    plain: "busiest moment",
     blurb: "holding peak capacity through the event",
+    plainBlurb: "keeping every server running until the rush is over",
     icon: Flame,
     text: "text-amber",
     ring: "border-amber/50 bg-amber/10",
@@ -33,7 +41,9 @@ const PHASE = {
   },
   after: {
     label: "window closed",
+    plain: "done",
     blurb: "event handled — draining back down",
+    plainBlurb: "the rush is over — removing the extra servers",
     icon: ShieldCheck,
     text: "text-green",
     ring: "border-green/50 bg-green/10",
@@ -73,7 +83,7 @@ function Shell({ children }) {
   )
 }
 
-export default function PredictionRamp({ prediction, currentReplicas }) {
+export default function PredictionRamp({ prediction, currentReplicas, technical = false }) {
   if (!prediction?.exists) {
     return (
       <Shell>
@@ -110,11 +120,15 @@ export default function PredictionRamp({ prediction, currentReplicas }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${phase.ring} ${phase.text}`}>
               <PhaseIcon size={13} strokeWidth={2.5} />
-              {prediction.phase}
+              {technical ? prediction.phase : phase.plain}
             </span>
-            <span className="font-mono text-xs text-text-faint">{prediction.event_id}</span>
+            {technical ? (
+              <span className="font-mono text-xs text-text-faint">{prediction.event_id}</span>
+            ) : (
+              <span className="text-xs font-medium text-text-muted">{eventName(prediction.event_id)}</span>
+            )}
             <span className="rounded-full border border-border bg-panel px-2 py-0.5 text-[10.5px] text-text-faint">
-              {prediction.kind}
+              {technical ? prediction.kind : (prediction.kind ?? "").startsWith("demo") ? "demo replay" : "real date"}
             </span>
           </div>
 
@@ -125,10 +139,14 @@ export default function PredictionRamp({ prediction, currentReplicas }) {
               ) : (
                 <MoveDown size={24} className="text-green" strokeWidth={2.6} />
               )}
-              {prediction.next_action ?? "on schedule"}
+              {technical || !prediction.next_action
+                ? (prediction.next_action ?? "on schedule")
+                : scalingUp
+                  ? `Add servers (up to ${prediction.peak_replicas})`
+                  : "Remove the extra servers"}
             </span>
           </div>
-          <p className="mt-1.5 text-sm text-text-muted">{phase.blurb}</p>
+          <p className="mt-1.5 text-sm text-text-muted">{technical ? phase.blurb : phase.plainBlurb}</p>
         </div>
 
         {/* Countdown — the single biggest number on the page */}
@@ -136,7 +154,7 @@ export default function PredictionRamp({ prediction, currentReplicas }) {
           <div className="text-right">
             <div className="flex items-center justify-end gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-faint">
               <Timer size={12} strokeWidth={2.4} />
-              next action in
+              {technical ? "next action in" : "next step in"}
             </div>
             <div className="tnum mt-0.5 text-5xl font-extrabold leading-none text-text sm:text-6xl">
               {value}
@@ -148,13 +166,13 @@ export default function PredictionRamp({ prediction, currentReplicas }) {
 
           <div className="text-right">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-text-faint">
-              predicted peak
+              {technical ? "predicted peak" : "planned for the rush"}
             </div>
             <div className="mt-0.5 text-5xl font-extrabold leading-none text-steel sm:text-6xl">
               <AnimatedNumber value={prediction.peak_replicas} />
             </div>
             <div className="mt-0.5 text-[11px] text-text-faint">
-              now running <span className="tnum font-semibold text-text-muted">{currentReplicas ?? 0}</span>
+              {technical ? "now running" : "running now"} <span className="tnum font-semibold text-text-muted">{currentReplicas ?? 0}</span>
             </div>
           </div>
         </div>
@@ -203,9 +221,9 @@ export default function PredictionRamp({ prediction, currentReplicas }) {
         </div>
 
         <div className="mt-2.5 flex justify-between font-mono text-[11px] text-text-faint">
-          <span>ramp_start {timeOnly(prediction.ramp_start)}</span>
-          <span>peak {timeOnly(prediction.ramp_peak)}</span>
-          <span>ramp_end {timeOnly(prediction.ramp_end)}</span>
+          <span>{term("ramp_start", technical)} {timeOnly(prediction.ramp_start)}</span>
+          <span>{term("ramp_peak", technical)} {timeOnly(prediction.ramp_peak)}</span>
+          <span>{term("ramp_end", technical)} {timeOnly(prediction.ramp_end)}</span>
         </div>
       </div>
     </Shell>
