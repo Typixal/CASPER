@@ -37,6 +37,20 @@ PORT = int(os.environ.get("CASPER_DASH_PORT", "8050"))
 # Module D load test so it adds no traffic to the measured run.
 _probe_enabled = os.environ.get("CASPER_DASH_PROBE", "1") != "0"
 
+# Locked during Module D's experiment (run-demo.ps1 -Compare). Starting the
+# probe switched off is not enough: one click on the masthead button turned
+# it back on mid-run, adding the dashboard's own requests to the traffic being
+# measured. Locked, the toggle refuses and the UI disables the button.
+_probe_locked = os.environ.get("CASPER_DASH_PROBE_LOCKED", "0") == "1"
+
+
+def probe_enabled():
+    return _probe_enabled
+
+
+def probe_locked():
+    return _probe_locked
+
 _state = {"generated_at": None, "starting": True}
 _state_lock = threading.Lock()
 
@@ -47,6 +61,7 @@ def _collect_loop():
     while True:
         try:
             snapshot = collector.collect(probe_enabled=_probe_enabled)
+            snapshot["probe"]["locked"] = _probe_locked
         except Exception as exc:  # keep the dashboard alive whatever happens
             snapshot = {
                 "generated_at": None,
@@ -77,6 +92,8 @@ def api_state():
 def api_probe_toggle():
     """Turn the dashboard's own latency probe on or off."""
     global _probe_enabled
+    if _probe_locked:
+        return jsonify({"probe_enabled": _probe_enabled, "locked": True}), 409
     _probe_enabled = not _probe_enabled
     return jsonify({"probe_enabled": _probe_enabled})
 

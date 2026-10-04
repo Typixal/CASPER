@@ -81,6 +81,28 @@ working with the probe off; only the latency panel goes quiet.
 
 ---
 
+## The experiment panel
+
+Once Module D has run (`.\run-demo.ps1 -Compare`), the **Reactive vs
+predictive** panel shows the result from
+`module-d-evaluation/results/comparison.json`: p95 response time, error rate,
+successful requests and replica-seconds for both strategies, with the better
+one marked per metric. Until then it shows how to produce it.
+
+Only the headline numbers travel over SSE — the file's per-interval time series
+stays on disk. A missing or half-written file (mid-run) shows the placeholder
+rather than breaking the page.
+
+`-Compare` starts the dashboard with its latency probe **off and locked**
+(`CASPER_DASH_PROBE=0`, `CASPER_DASH_PROBE_LOCKED=1`): the toggle endpoint
+returns 409 and the masthead button reads "probe locked off". Off alone was not
+enough — one click turned it back on mid-run and added the dashboard's own
+requests to the traffic being measured.
+
+Tests (collector + probe controls): `.\.venv\Scripts\python.exe -m pytest tests/ -q`
+
+---
+
 ## Endpoints
 
 | Route | Purpose |

@@ -1,0 +1,13 @@
+# pandas: buckets thousands of raw k6 samples into per-interval p95 and error
+#         rates -- the one place in the project a dataframe earns its keep.
+# matplotlib: the comparison charts for the Phase I report.
+# pytest: development only, the module's test suite.
+#
+# k6 itself is NOT a Python package. It is a standalone binary fetched into
+# tools/ by tools/fetch_k6.ps1, so nothing is installed system-wide.
+pandas==2.2.3
+matplotlib==3.9.2
+# Pinned: newer pyparsing deprecates APIs matplotlib 3.9 still calls, which
+# floods every test run with warnings from inside the library.
+pyparsing==3.1.4
+pytest==8.3.3

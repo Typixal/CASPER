@@ -1,0 +1,568 @@
+{
+  "strategies": {
+    "reactive": {
+      "summary": {
+        "requests": 31536,
+        "median_ms": 91.18809999999999,
+        "p95_ms": 2063.1142499999996,
+        "avg_ms": 493.7176144438069,
+        "max_ms": 2132.4302,
+        "error_rate": 0.05178209030948757,
+        "success_pct": 93.89581436242032,
+        "dropped": 311
+      },
+      "series": {
+        "start": 1791124997,
+        "buckets": [
+          {
+            "t": 0,
+            "requests": 55,
+            "p95_ms": 118.9193,
+            "error_rate": 0.0
+          },
+          {
+            "t": 5,
+            "requests": 61,
+            "p95_ms": 113.9131,
+            "error_rate": 0.0
+          },
+          {
+            "t": 10,
+            "requests": 59,
+            "p95_ms": 119.1428,
+            "error_rate": 0.0
+          },
+          {
+            "t": 15,
+            "requests": 60,
+            "p95_ms": 118.6817,
+            "error_rate": 0.0
+          },
+          {
+            "t": 20,
+            "requests": 60,
+            "p95_ms": 117.7001,
+            "error_rate": 0.0
+          },
+          {
+            "t": 25,
+            "requests": 60,
+            "p95_ms": 114.3321,
+            "error_rate": 0.0
+          },
+          {
+            "t": 30,
+            "requests": 61,
+            "p95_ms": 115.1978,
+            "error_rate": 0.0
+          },
+          {
+            "t": 35,
+            "requests": 60,
+            "p95_ms": 118.9165,
+            "error_rate": 0.0
+          },
+          {
+            "t": 40,
+            "requests": 59,
+            "p95_ms": 114.8982,
+            "error_rate": 0.0
+          },
+          {
+            "t": 45,
+            "requests": 188,
+            "p95_ms": 126.6783,
+            "error_rate": 0.0
+          },
+          {
+            "t": 50,
+            "requests": 347,
+            "p95_ms": 1140.1424,
+            "error_rate": 0.0
+          },
+          {
+            "t": 55,
+            "requests": 523,
+            "p95_ms": 2102.6772,
+            "error_rate": 0.3326959847036329
+          },
+          {
+            "t": 60,
+            "requests": 841,
+            "p95_ms": 2105.8812,
+            "error_rate": 0.5862068965517241
+          },
+          {
+            "t": 65,
+            "requests": 1369,
+            "p95_ms": 2094.4075,
+            "error_rate": 0.38203067932797663
+          },
+          {
+            "t": 70,
+            "requests": 1131,
+            "p95_ms": 2090.7919,
+            "error_rate": 0.0610079575596817
+          },
+          {
+            "t": 75,
+            "requests": 1125,
+            "p95_ms": 2088.6654,
+            "error_rate": 0.064
+          },
+          {
+            "t": 80,
+            "requests": 1210,
+            "p95_ms": 2100.0835,
+            "error_rate": 0.12479338842975207
+          },
+          {
+            "t": 85,
+            "requests": 1518,
+            "p95_ms": 2098.6535,
+            "error_rate": 0.09881422924901186
+          },
+          {
+            "t": 90,
+            "requests": 1467,
+            "p95_ms": 1391.3439,
+            "error_rate": 0.0006816632583503749
+          },
+          {
+            "t": 95,
+            "requests": 1252,
+            "p95_ms": 116.407,
+            "error_rate": 0.0
+          },
+          {
+            "t": 100,
+            "requests": 1252,
+            "p95_ms": 116.276,
+            "error_rate": 0.0
+          },
+          {
+            "t": 105,
+            "requests": 1248,
+            "p95_ms": 116.9144,
+            "error_rate": 0.0
+          },
+          {
+            "t": 110,
+            "requests": 1250,
+            "p95_ms": 116.1743,
+            "error_rate": 0.0
+          },
+          {
+            "t": 115,
+            "requests": 1250,
+            "p95_ms": 116.7563,
+            "error_rate": 0.0
+          },
+          {
+            "t": 120,
+            "requests": 1251,
+            "p95_ms": 116.1365,
+            "error_rate": 0.0
+          },
+          {
+            "t": 125,
+            "requests": 1249,
+            "p95_ms": 127.8122,
+            "error_rate": 0.0
+          },
+          {
+            "t": 130,
+            "requests": 1250,
+            "p95_ms": 120.6484,
+            "error_rate": 0.0
+          },
+          {
+            "t": 135,
+            "requests": 1249,
+            "p95_ms": 129.8196,
+            "error_rate": 0.0
+          },
+          {
+            "t": 140,
+            "requests": 1253,
+            "p95_ms": 121.5234,
+            "error_rate": 0.0
+          },
+          {
+            "t": 145,
+            "requests": 1245,
+            "p95_ms": 121.0961,
+            "error_rate": 0.0
+          },
+          {
+            "t": 150,
+            "requests": 1255,
+            "p95_ms": 125.8491,
+            "error_rate": 0.0
+          },
+          {
+            "t": 155,
+            "requests": 1196,
+            "p95_ms": 120.115,
+            "error_rate": 0.0
+          },
+          {
+            "t": 160,
+            "requests": 1068,
+            "p95_ms": 118.2324,
+            "error_rate": 0.0
+          },
+          {
+            "t": 165,
+            "requests": 947,
+            "p95_ms": 116.6414,
+            "error_rate": 0.0
+          },
+          {
+            "t": 170,
+            "requests": 823,
+            "p95_ms": 115.1536,
+            "error_rate": 0.0
+          },
+          {
+            "t": 175,
+            "requests": 700,
+            "p95_ms": 115.4193,
+            "error_rate": 0.0
+          },
+          {
+            "t": 180,
+            "requests": 569,
+            "p95_ms": 115.7941,
+            "error_rate": 0.0
+          },
+          {
+            "t": 185,
+            "requests": 448,
+            "p95_ms": 115.6488,
+            "error_rate": 0.0
+          },
+          {
+            "t": 190,
+            "requests": 321,
+            "p95_ms": 115.3756,
+            "error_rate": 0.0
+          },
+          {
+            "t": 195,
+            "requests": 197,
+            "p95_ms": 119.2242,
+            "error_rate": 0.0
+          },
+          {
+            "t": 200,
+            "requests": 9,
+            "p95_ms": 120.8859,
+            "error_rate": 0.0
+          }
+        ]
+      },
+      "events": [
+        {
+          "t": 66.282,
+          "replicas": 3,
+          "source": "reactive"
+        },
+        {
+          "t": 86.64,
+          "replicas": 5,
+          "source": "reactive"
+        },
+        {
+          "t": 130.066,
+          "replicas": 4,
+          "source": "reactive"
+        },
+        {
+          "t": 198.694,
+          "replicas": 3,
+          "source": "reactive"
+        }
+      ],
+      "replica_seconds": 622.9159999999999
+    },
+    "predictive": {
+      "summary": {
+        "requests": 31847,
+        "median_ms": 74.7316,
+        "p95_ms": 120.58653,
+        "avg_ms": 75.11222510126564,
+        "max_ms": 187.2334,
+        "error_rate": 0,
+        "success_pct": 100.0,
+        "dropped": 0
+      },
+      "series": {
+        "start": 1791125211,
+        "buckets": [
+          {
+            "t": 0,
+            "requests": 58,
+            "p95_ms": 116.4429,
+            "error_rate": 0.0
+          },
+          {
+            "t": 5,
+            "requests": 60,
+            "p95_ms": 120.7207,
+            "error_rate": 0.0
+          },
+          {
+            "t": 10,
+            "requests": 60,
+            "p95_ms": 113.7624,
+            "error_rate": 0.0
+          },
+          {
+            "t": 15,
+            "requests": 60,
+            "p95_ms": 110.9185,
+            "error_rate": 0.0
+          },
+          {
+            "t": 20,
+            "requests": 60,
+            "p95_ms": 118.9806,
+            "error_rate": 0.0
+          },
+          {
+            "t": 25,
+            "requests": 60,
+            "p95_ms": 115.6057,
+            "error_rate": 0.0
+          },
+          {
+            "t": 30,
+            "requests": 61,
+            "p95_ms": 118.6877,
+            "error_rate": 0.0
+          },
+          {
+            "t": 35,
+            "requests": 59,
+            "p95_ms": 119.4146,
+            "error_rate": 0.0
+          },
+          {
+            "t": 40,
+            "requests": 60,
+            "p95_ms": 114.2579,
+            "error_rate": 0.0
+          },
+          {
+            "t": 45,
+            "requests": 202,
+            "p95_ms": 116.1983,
+            "error_rate": 0.0
+          },
+          {
+            "t": 50,
+            "requests": 499,
+            "p95_ms": 115.6767,
+            "error_rate": 0.0
+          },
+          {
+            "t": 55,
+            "requests": 796,
+            "p95_ms": 115.6191,
+            "error_rate": 0.0
+          },
+          {
+            "t": 60,
+            "requests": 1091,
+            "p95_ms": 117.4884,
+            "error_rate": 0.0
+          },
+          {
+            "t": 65,
+            "requests": 1249,
+            "p95_ms": 120.5161,
+            "error_rate": 0.0
+          },
+          {
+            "t": 70,
+            "requests": 1249,
+            "p95_ms": 121.3646,
+            "error_rate": 0.0
+          },
+          {
+            "t": 75,
+            "requests": 1254,
+            "p95_ms": 125.4758,
+            "error_rate": 0.0
+          },
+          {
+            "t": 80,
+            "requests": 1248,
+            "p95_ms": 120.5785,
+            "error_rate": 0.0
+          },
+          {
+            "t": 85,
+            "requests": 1251,
+            "p95_ms": 119.7665,
+            "error_rate": 0.0
+          },
+          {
+            "t": 90,
+            "requests": 1251,
+            "p95_ms": 130.4721,
+            "error_rate": 0.0
+          },
+          {
+            "t": 95,
+            "requests": 1248,
+            "p95_ms": 121.2367,
+            "error_rate": 0.0
+          },
+          {
+            "t": 100,
+            "requests": 1250,
+            "p95_ms": 121.2462,
+            "error_rate": 0.0
+          },
+          {
+            "t": 105,
+            "requests": 1251,
+            "p95_ms": 121.5884,
+            "error_rate": 0.0
+          },
+          {
+            "t": 110,
+            "requests": 1249,
+            "p95_ms": 122.6401,
+            "error_rate": 0.0
+          },
+          {
+            "t": 115,
+            "requests": 1249,
+            "p95_ms": 120.4973,
+            "error_rate": 0.0
+          },
+          {
+            "t": 120,
+            "requests": 1256,
+            "p95_ms": 119.1128,
+            "error_rate": 0.0
+          },
+          {
+            "t": 125,
+            "requests": 1243,
+            "p95_ms": 121.9116,
+            "error_rate": 0.0
+          },
+          {
+            "t": 130,
+            "requests": 1257,
+            "p95_ms": 133.4793,
+            "error_rate": 0.0
+          },
+          {
+            "t": 135,
+            "requests": 1245,
+            "p95_ms": 121.0109,
+            "error_rate": 0.0
+          },
+          {
+            "t": 140,
+            "requests": 1254,
+            "p95_ms": 129.0578,
+            "error_rate": 0.0
+          },
+          {
+            "t": 145,
+            "requests": 1247,
+            "p95_ms": 123.8316,
+            "error_rate": 0.0
+          },
+          {
+            "t": 150,
+            "requests": 1251,
+            "p95_ms": 123.152,
+            "error_rate": 0.0
+          },
+          {
+            "t": 155,
+            "requests": 1193,
+            "p95_ms": 119.5495,
+            "error_rate": 0.0
+          },
+          {
+            "t": 160,
+            "requests": 1064,
+            "p95_ms": 118.7221,
+            "error_rate": 0.0
+          },
+          {
+            "t": 165,
+            "requests": 940,
+            "p95_ms": 116.0173,
+            "error_rate": 0.0
+          },
+          {
+            "t": 170,
+            "requests": 816,
+            "p95_ms": 117.3674,
+            "error_rate": 0.0
+          },
+          {
+            "t": 175,
+            "requests": 691,
+            "p95_ms": 117.1406,
+            "error_rate": 0.0
+          },
+          {
+            "t": 180,
+            "requests": 566,
+            "p95_ms": 116.1599,
+            "error_rate": 0.0
+          },
+          {
+            "t": 185,
+            "requests": 440,
+            "p95_ms": 116.2054,
+            "error_rate": 0.0
+          },
+          {
+            "t": 190,
+            "requests": 314,
+            "p95_ms": 115.4765,
+            "error_rate": 0.0
+          },
+          {
+            "t": 195,
+            "requests": 192,
+            "p95_ms": 114.4863,
+            "error_rate": 0.0
+          },
+          {
+            "t": 200,
+            "requests": 3,
+            "p95_ms": 104.4781,
+            "error_rate": 0.0
+          }
+        ]
+      },
+      "events": [
+        {
+          "t": 31.221,
+          "replicas": 4,
+          "source": "predictive"
+        }
+      ],
+      "replica_seconds": 706.337
+    }
+  },
+  "verdict": {
+    "p95_ms": "predictive",
+    "error_rate": "predictive",
+    "success_pct": "predictive",
+    "replica_seconds": "reactive"
+  },
+  "p95_reduction_pct": 94.16
+}

@@ -1,7 +1,7 @@
 import { Globe, Radio, WifiOff } from "lucide-react"
 import { motion } from "framer-motion"
 
-export default function Masthead({ entrypoint, connected, probeEnabled, onToggleProbe, probePending }) {
+export default function Masthead({ entrypoint, connected, probeEnabled, probeLocked, onToggleProbe, probePending }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border/80 bg-navy/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5">
@@ -27,8 +27,12 @@ export default function Masthead({ entrypoint, connected, probeEnabled, onToggle
         <button
           type="button"
           onClick={onToggleProbe}
-          disabled={probePending}
-          title="The dashboard's own latency probe — turn it off before a Module D k6 run"
+          disabled={probePending || probeLocked}
+          title={
+            probeLocked
+              ? "Locked off while Module D's experiment runs, so the dashboard adds no traffic to the measurement"
+              : "The dashboard's own latency probe — turn it off before a Module D k6 run"
+          }
           className={
             "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 " +
             (probeEnabled
@@ -37,7 +41,7 @@ export default function Masthead({ entrypoint, connected, probeEnabled, onToggle
           }
         >
           <Radio size={13} strokeWidth={2.4} className={probeEnabled ? "pulse-dot" : ""} />
-          probe {probeEnabled ? "on" : "off"}
+          probe {probeLocked ? "locked off" : probeEnabled ? "on" : "off"}
         </button>
 
         <span

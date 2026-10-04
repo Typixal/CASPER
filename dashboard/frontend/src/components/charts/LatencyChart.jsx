@@ -76,7 +76,9 @@ export default function LatencyChart({ probeSummary, probeEnabled }) {
               axisLine={false}
               tickLine={false}
               width={44}
-              tickFormatter={(v) => `${v}`}
+              // Overload pushes latency into the thousands; a 44px axis clipped
+              // "2000" to "000". Thousands read as "2.0k" instead.
+              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`)}
               label={{
                 value: "ms",
                 position: "insideTopLeft",

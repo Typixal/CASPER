@@ -1,0 +1,7 @@
+{
+  "event_id": "kerala_plustwo_admission_2026",
+  "predicted_peak_replicas": 4,
+  "ramp_start": "2026-06-20T16:30:00+05:30",
+  "ramp_peak": "2026-06-20T17:15:00+05:30",
+  "ramp_end": "2026-06-20T21:00:00+05:30"
+}
