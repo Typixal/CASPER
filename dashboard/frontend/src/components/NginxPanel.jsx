@@ -2,6 +2,11 @@ import { AlertTriangle, ArrowRightLeft, FileCode2 } from "lucide-react"
 import { motion } from "framer-motion"
 import { timeOnly } from "../lib/format"
 
+/**
+ * Upstream servers nginx currently routes to.
+ * @param {object} props
+ * @param {object} props.nginx Snapshot nginx state.
+ */
 export default function NginxPanel({ nginx }) {
   if (!nginx?.exists) {
     return (

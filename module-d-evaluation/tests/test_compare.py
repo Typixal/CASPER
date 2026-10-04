@@ -1,7 +1,6 @@
-"""Tests for turning raw k6 output into the comparison.
+"""Tests for compare.py, using real k6 v2.3.0 output as fixtures.
 
-Fixtures are REAL k6 v2.3.0 output (a 6-second run against a local stub
-with a ~10% 503 rate), trimmed -- not hand-written guesses at the format.
+Fixture run: 6 s against a local stub returning ~10% 503s.
 """
 
 import json
@@ -28,9 +27,7 @@ def test_summarize_reads_request_count_and_latency(k6_summary):
 
 
 def test_summarize_reads_the_failure_rate_not_the_misleading_passes_field(k6_summary):
-    # In k6's http_req_failed, "passes" counts requests that FAILED (6 here)
-    # and "fails" counts ones that succeeded (68). Reading "passes" as
-    # successes would invert the headline result of the whole project.
+    # k6's http_req_failed "passes" counts failures (6), "fails" successes (68).
     summary = compare.summarize_k6(k6_summary)
 
     assert summary["error_rate"] == pytest.approx(6 / 74)
@@ -43,22 +40,17 @@ def test_summarize_treats_missing_dropped_iterations_as_zero(k6_summary):
 
 
 def test_summarize_counts_dropped_iterations_when_k6_reports_them(k6_summary):
-    # Dropped = k6 could not even start a request on schedule; for an
-    # arrival-rate test those are candidates who never got through.
+    # Dropped = requests k6 could not start on schedule.
     k6_summary["metrics"]["dropped_iterations"] = {"values": {"count": 12, "rate": 2.0}}
 
     assert compare.summarize_k6(k6_summary)["dropped"] == 12
 
 
 def test_success_pct_counts_dropped_requests_as_unsuccessful(k6_summary):
-    # 74 sent (68 OK) plus 26 k6 could not even send = 100 attempts, 68 good.
-    # Leaving the 26 out would flatter whichever strategy was MORE overloaded.
+    # 74 sent (68 OK) + 26 dropped = 100 attempts, 68 good.
     k6_summary["metrics"]["dropped_iterations"] = {"values": {"count": 26, "rate": 4.0}}
 
     assert compare.summarize_k6(k6_summary)["success_pct"] == pytest.approx(68.0)
-
-
-# --- time series from raw k6 samples (pandas) -------------------------------
 
 
 def test_timeseries_accounts_for_every_request():
@@ -95,9 +87,6 @@ def test_timeseries_p95_never_exceeds_the_slowest_sample():
     assert max(b["p95_ms"] for b in series["buckets"]) <= 78.56
 
 
-# --- scale events from Module C's audit log ----------------------------------
-
-
 def write_log(tmp_path, entries):
     path = tmp_path / "scale_actions.jsonl"
     path.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
@@ -115,7 +104,7 @@ def entry(iso, healthy, source):
     }
 
 
-# 1791120228 == 2026-10-04T13:23:48Z, the fixture run's start
+# 2026-10-04T13:23:48Z, the fixture run's start
 RUN_START = 1791120228
 
 
@@ -163,9 +152,6 @@ def test_replica_seconds_with_no_scaling_is_initial_times_duration():
     assert compare.replica_seconds([], initial=2, duration_s=30) == 60.0
 
 
-# --- the verdict and the reports ---------------------------------------------
-
-
 def run_result(p95, error_rate, success_pct, replica_secs):
     return {
         "summary": {
@@ -201,7 +187,7 @@ def test_the_verdict_picks_the_better_strategy_per_metric(runs):
 
 
 def test_the_verdict_credits_reactive_when_it_uses_less_capacity(runs):
-    # The honest trade-off: provisioning ahead of traffic costs replica-time.
+    # Provisioning ahead of traffic costs replica-time.
     assert compare.build_comparison(runs)["verdict"]["replica_seconds"] == "reactive"
 
 

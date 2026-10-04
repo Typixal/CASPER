@@ -52,7 +52,7 @@ const PHASE = {
   },
 }
 
-// mm:ss for anything under an hour — reads faster on a projector than "93s".
+// Seconds under a minute, otherwise m:ss.
 function bigCountdown(seconds) {
   if (seconds === null || seconds === undefined) return { value: "—", unit: "" }
   const s = Math.max(0, Math.round(seconds))
@@ -83,6 +83,13 @@ function Shell({ children }) {
   )
 }
 
+/**
+ * Active Prediction: phase, countdown to the next scale action, and the ramp bar.
+ * @param {object} props
+ * @param {object} props.prediction Snapshot prediction.
+ * @param {number} [props.currentReplicas]
+ * @param {boolean} [props.technical=false] Show engineering terms.
+ */
 export default function PredictionRamp({ prediction, currentReplicas, technical = false }) {
   if (!prediction?.exists) {
     return (
@@ -149,7 +156,7 @@ export default function PredictionRamp({ prediction, currentReplicas, technical 
           <p className="mt-1.5 text-sm text-text-muted">{technical ? phase.blurb : phase.plainBlurb}</p>
         </div>
 
-        {/* Countdown — the single biggest number on the page */}
+        {/* Countdown */}
         <div className="flex items-center gap-6">
           <div className="text-right">
             <div className="flex items-center justify-end gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-faint">
@@ -181,8 +188,7 @@ export default function PredictionRamp({ prediction, currentReplicas, technical 
       {/* Ramp bar */}
       <div className="mt-7">
         <div className="relative h-2.5 overflow-visible rounded-full border border-border bg-panel/80">
-          {/* Ghost of the window that has not started yet, so "before" does
-              not render as an empty grey track with nothing on it. */}
+          {/* Hatched placeholder until the window starts */}
           {prediction.phase === "before" && (
             <div
               className="absolute inset-0 rounded-full opacity-30"
@@ -201,14 +207,14 @@ export default function PredictionRamp({ prediction, currentReplicas, technical 
             transition={{ duration: 0.6, ease: "easeOut" }}
           />
 
-          {/* predicted-peak tick */}
+          {/* Predicted-peak tick */}
           <div
             className="absolute top-1/2 h-4 w-0.5 -translate-y-1/2 rounded bg-text-faint"
             style={{ left: `${peakPct}%` }}
             title={`predicted peak ${timeOnly(prediction.ramp_peak)}`}
           />
 
-          {/* "now" needle, only while inside the window */}
+          {/* "Now" needle, only inside the window */}
           {prediction.phase !== "before" && prediction.phase !== "after" && (
             <motion.div
               className="absolute -top-1 h-4.5 w-1 -translate-x-1/2 rounded-full bg-text"

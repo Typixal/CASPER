@@ -12,15 +12,13 @@ import { useLiveState, useProbeToggle } from "./lib/useLiveState"
 const PAGE_IDS = PAGES.map((p) => p.id)
 const TECHNICAL_KEY = "casper.technical"
 
-// The page lives in the URL hash, so a refresh -- or the browser's back
-// button -- keeps your place during a demo.
+// Page lives in the URL hash so refresh and back keep the viewer's place.
 function pageFromHash() {
   const id = window.location.hash.replace(/^#/, "")
   return PAGE_IDS.includes(id) ? id : "overview"
 }
 
-// localStorage can be blocked (private windows, strict settings). The switch
-// is a convenience; losing it must never break the page.
+// localStorage may be blocked; the setting is a convenience, never fatal.
 function readTechnical() {
   try {
     return localStorage.getItem(TECHNICAL_KEY) === "1"
@@ -33,10 +31,13 @@ function writeTechnical(value) {
   try {
     localStorage.setItem(TECHNICAL_KEY, value ? "1" : "0")
   } catch {
-    /* storage blocked -- keep working without persistence */
+    /* storage blocked: carry on without persistence */
   }
 }
 
+/**
+ * Dashboard shell: sidebar, hash-routed pages and the technical-terms setting.
+ */
 export default function App() {
   const { state, connected } = useLiveState()
   const { toggle: toggleProbe, pending: probePending } = useProbeToggle()

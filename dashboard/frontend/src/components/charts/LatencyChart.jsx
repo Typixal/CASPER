@@ -30,10 +30,11 @@ function ProbeTooltip({ active, payload }) {
 }
 
 /**
- * Probe latency over time. The dashboard's own request, once per refresh --
- * labelled as such so it is never confused with Module D's k6 numbers.
- * Failed probes (a drained stack returning 502) are drawn as red reference
- * lines rather than silently breaking the series.
+ * Latency of the dashboard's own probe over time (not k6's measurements).
+ * Failed probes are drawn as red reference lines.
+ * @param {object} props
+ * @param {object} props.probeSummary Snapshot probe_summary.
+ * @param {boolean} props.probeEnabled
  */
 export default function LatencyChart({ probeSummary, probeEnabled }) {
   const history = probeSummary?.history ?? []
@@ -76,8 +77,7 @@ export default function LatencyChart({ probeSummary, probeEnabled }) {
               axisLine={false}
               tickLine={false}
               width={44}
-              // Overload pushes latency into the thousands; a 44px axis clipped
-              // "2000" to "000". Thousands read as "2.0k" instead.
+              // "2.0k": a 44px axis clips four-digit values.
               tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`)}
               label={{
                 value: "ms",

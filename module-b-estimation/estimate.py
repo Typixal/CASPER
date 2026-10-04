@@ -1,8 +1,11 @@
-"""Module B -- traffic-magnitude estimation.
+"""Module B: estimate an event's peak traffic and turn it into a Prediction.
 
-Turns an Event (Module A's output) into a Prediction (Module C's input) using
-proxy signals instead of the portal's own traffic history, which is the whole
-point: a portal that is idle 364 days a year has no history to learn from.
+Uses proxy signals (registered candidates, comparable past events, the
+search-interest curve) instead of the portal's own traffic history, which an
+idle-most-of-the-year portal does not have.
+
+Usage:
+    python estimate.py [events.json]
 """
 
 import json
@@ -10,50 +13,31 @@ import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# --- Calibration -----------------------------------------------------------
-#
-# Documented conversion basis, fixed across the project: one portal replica
-# serves roughly 4000 requests per minute.
+# Project-wide conversion basis.
 REQ_PER_MIN_PER_REPLICA = 4000
 
-# Share of registered candidates expected to hit the portal in the single
-# busiest minute.
-#
-# This is the one calibrated constant in the model, and it is pinned to the
-# worked example frozen into every schema sample in the project docs:
-# 1,650,000 candidates -> 12 replicas.
-#
-#     12 replicas * 4000 req/min = 48,000 req/min at peak
-#     48,000 / 1,650,000         = 0.0291 req per candidate per minute
-#
-# Rounded to 0.029, i.e. ~2.9% of registered candidates refreshing within the
-# same minute. Plausible for a result announcement, where the publication
-# time is known in advance and candidates are already waiting.
+# Share of registered candidates hitting the portal in the busiest minute.
+# Calibrated to the documented example (1,650,000 candidates -> 12 replicas):
+# 12 * 4000 / 1,650,000 = 0.0291, rounded to 0.029.
 PEAK_CONCURRENCY_RATE = 0.029
 
-# Weight on the comparable-prior-event signal.
-#
-# The registered-candidate count is already a direct measure of this event's
-# scale, so it carries most of the estimate. A comparable prior event adds one
-# thing the count alone cannot show: the trend. A cohort that has grown since
-# last year tends to bring proportionally heavier same-minute demand (more
-# first-time candidates, wider phone access), so growth nudges the estimate up.
-#
-# The adjustment is deliberately one-directional -- see below.
+# Weight of cohort growth against the comparable prior events.
 COMPARABLE_WEIGHT = 0.15
 
 
 def comparable_growth_factor(candidates, prior_candidates):
-    """Multiplier (>= 1.0) from how this event compares with its history.
+    """Multiplier from cohort growth against comparable prior events.
 
-    Returns 1.0 -- no adjustment -- for a first-time event with no priors.
-    That is not a gap in the model: a zero-history event is precisely the case
-    CASPER is built for, and the registered-candidate count carries it alone.
+    1.0 when there is no history. Never below 1.0: a shrinking cohort removes
+    the nudge but does not cut the base estimate, which the registered count
+    already measures directly.
 
-    The factor never drops below 1.0. A prior larger than the current event is
-    not evidence that less capacity is needed; the registered count already
-    measures this event's scale directly, so a shrinking cohort simply removes
-    the upward nudge rather than cutting into the base estimate.
+    Args:
+        candidates: Registered candidates for this event.
+        prior_candidates: Registered candidates for each prior event.
+
+    Returns:
+        A factor >= 1.0.
     """
     if not prior_candidates:
         return 1.0
@@ -67,33 +51,42 @@ def comparable_growth_factor(candidates, prior_candidates):
 
 
 def estimate_peak_replicas(candidates, prior_candidates):
-    """Predict the replica count needed at peak for an event."""
+    """Replicas needed at the event's peak.
+
+    Args:
+        candidates: Registered candidates for this event.
+        prior_candidates: Registered candidates for each prior event.
+
+    Returns:
+        Replica count, rounded up.
+    """
     effective_candidates = candidates * comparable_growth_factor(
         candidates, prior_candidates
     )
     peak_req_per_min = effective_candidates * PEAK_CONCURRENCY_RATE
 
-    # Always round up. A fractional replica cannot be run, and rounding down
-    # is the under-provisioning that makes portals fall over on result day.
+    # Round up: rounding down is exactly the under-provisioning to avoid.
     return math.ceil(peak_req_per_min / REQ_PER_MIN_PER_REPLICA)
 
 
-# Interest level (0-100 on the search-interest curve) at which the portal is
-# considered to be under event traffic. Below this, demand is background noise
-# and the extra replicas are wasted money.
+# Search interest (0-100) at or above which the portal counts as under event load.
 RAMP_INTEREST_THRESHOLD = 10
 
 
 def ramp_window(event_date, curve):
-    """Derive the scale-up / peak / scale-down instants from the curve.
+    """Derive the ramp start, peak and end instants from the interest curve.
 
-    The curve is the synthetic search-interest signal: (offset_minutes,
-    interest) points relative to the event's publication time, shaped like a
-    Google Trends result-day spike. It supplies the *timing* of the event --
-    the candidate count supplies its magnitude.
+    Args:
+        event_date: Publication time (timezone-aware).
+        curve: (offset_minutes, interest) points relative to event_date,
+            sorted by offset.
 
-    All three instants keep the event's own timezone offset, because Module C
-    schedules real scale actions against them.
+    Returns:
+        Dict with ramp_start, ramp_peak, ramp_end datetimes in the event's
+        own offset.
+
+    Raises:
+        ValueError: If the curve never reaches the threshold.
     """
     above = [point for point in curve if point[1] >= RAMP_INTEREST_THRESHOLD]
     if not above:
@@ -113,17 +106,20 @@ def ramp_window(event_date, curve):
     }
 
 
-# The synthetic search-interest curve this module ships.
 DEFAULT_CURVE = Path(__file__).resolve().parent / "search_interest_sample.csv"
 
 
 def load_search_curve(path=None):
-    """Read a search-interest curve CSV into (offset_minutes, interest) points.
+    """Read a search-interest CSV into sorted (offset_minutes, interest) points.
 
-    Lines starting with '#' are comments and the first data row is the header.
-    Points are returned sorted by offset, since ramp_window() reads the first
-    and last points above the threshold and an out-of-order file would
-    silently produce a reversed window.
+    Skips '#' comment lines and the header row. Sorting matters: ramp_window()
+    reads the first and last points above the threshold.
+
+    Args:
+        path: CSV file. Defaults to the shipped sample curve.
+
+    Returns:
+        A list of (int, float) tuples sorted by offset.
     """
     points = []
     for line in Path(path or DEFAULT_CURVE).read_text(encoding="utf-8").splitlines():
@@ -137,15 +133,15 @@ def load_search_curve(path=None):
 
 
 def predict(event, prior_events, curve=None):
-    """Turn an Event into a Prediction.
+    """Turn an Event into a Prediction (frozen schema).
 
-    This is Module B's whole job and the contract Module C consumes:
+    Args:
+        event: The Event to predict for.
+        prior_events: Its comparable past Events; may be empty.
+        curve: Interest curve. Defaults to the shipped sample.
 
-        Event (Module A)  ->  predict()  ->  Prediction (Module C)
-
-    `prior_events` are the comparable past events Module A resolved from
-    `prior_similar_event_ids`. An empty list is valid and meaningful -- it is
-    the zero-history event the project is built around.
+    Returns:
+        A Prediction dict with ISO 8601 timestamps.
     """
     event_date = datetime.fromisoformat(event["date"])
     window = ramp_window(event_date, curve or load_search_curve())
@@ -164,21 +160,34 @@ def predict(event, prior_events, curve=None):
     }
 
 
-# Hand-authored sample Events, so this module is testable and demoable on its
-# own before Module A's dataset is wired in. Same frozen Event schema.
+# Standalone sample Events, so the module runs without Module A.
 DEFAULT_SAMPLE_EVENTS = Path(__file__).resolve().parent / "sample_events.json"
 
-# Where generated Predictions are written, one JSON file per event.
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "predictions"
 
 
 def load_events(path=None):
-    """Read Events from a JSON file (Module A's dataset, or the samples)."""
+    """Read Events from a JSON file.
+
+    Args:
+        path: Module A's dataset or another Event file. Defaults to the samples.
+
+    Returns:
+        The list of Events.
+    """
     return json.loads(Path(path or DEFAULT_SAMPLE_EVENTS).read_text(encoding="utf-8"))
 
 
 def predict_all(events, curve=None):
-    """Produce a Prediction for every event, resolving priors within the set."""
+    """Predict every event, resolving priors within the same set.
+
+    Args:
+        events: Events to predict; priors outside the set are ignored.
+        curve: Interest curve. Defaults to the shipped sample.
+
+    Returns:
+        One Prediction per event, in input order.
+    """
     by_id = {event["event_id"]: event for event in events}
 
     predictions = []
@@ -193,7 +202,15 @@ def predict_all(events, curve=None):
 
 
 def write_prediction(prediction, output_dir=None):
-    """Write one Prediction to <output_dir>/<event_id>.json and return the path."""
+    """Write a Prediction to <output_dir>/<event_id>.json.
+
+    Args:
+        prediction: The Prediction to write.
+        output_dir: Target folder. Defaults to predictions/.
+
+    Returns:
+        Path of the written file.
+    """
     directory = Path(output_dir or DEFAULT_OUTPUT_DIR)
     directory.mkdir(parents=True, exist_ok=True)
 
@@ -205,7 +222,14 @@ def write_prediction(prediction, output_dir=None):
 
 
 def summarize(predictions):
-    """One human-readable line per Prediction, for the CLI output."""
+    """Format one line per Prediction for the CLI.
+
+    Args:
+        predictions: Predictions to describe.
+
+    Returns:
+        A list of display lines.
+    """
     lines = []
     for prediction in predictions:
         start = datetime.fromisoformat(prediction["ramp_start"])
@@ -222,9 +246,6 @@ def summarize(predictions):
 
 
 if __name__ == "__main__":
-    # Deliverable: produce a Prediction for every event and write them out.
-    #     python estimate.py                      (uses the sample Events)
-    #     python estimate.py ../module-a-ingestion/events.json
     import sys
 
     source = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SAMPLE_EVENTS

@@ -3,12 +3,12 @@
     Downloads a pinned k6 release into module-d-evaluation\tools\k6.exe.
 
 .DESCRIPTION
-    k6 is a single standalone binary, not a Python package. This drops it
-    inside the project folder so nothing is installed system-wide and the C:
-    drive stays clean. tools\ is gitignored; re-run this on a fresh clone.
+    Keeps k6 inside the project instead of installing it system-wide.
+    tools\ is gitignored, so run this once per clone. Does nothing if the
+    pinned version is already present.
 
-    Idempotent: does nothing if the pinned version is already present.
-    Needs internet once, at fetch time. Running k6 afterwards does not.
+.PARAMETER Version
+    k6 release tag. Default v2.3.0.
 #>
 
 [CmdletBinding()]
@@ -36,7 +36,7 @@ $zip     = Join-Path $ToolsDir "$name.zip"
 $extract = Join-Path $ToolsDir $name
 
 Write-Host "Downloading $url"
-# TLS 1.2 explicitly: Windows PowerShell 5.1 can default to older protocols.
+# Windows PowerShell 5.1 may default to TLS below 1.2.
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
 

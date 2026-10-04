@@ -1,10 +1,4 @@
-"""Tests for the demo portal's per-replica capacity limit.
-
-Without a limit, each request just sleeps on its own thread, so piling on
-load barely moves latency -- and a reactive scaler watching latency would
-have nothing to react to. These tests pin the behaviour that makes an
-under-provisioned replica look like one: queueing, then refusing.
-"""
+"""Tests for the portal's per-replica capacity gate: queue, then refuse."""
 
 import importlib
 import threading
@@ -14,7 +8,7 @@ import pytest
 
 
 def load_portal(monkeypatch, *, max_concurrent, queue_timeout_ms, delay_ms):
-    """Import the portal fresh with the given capacity settings."""
+    """Re-import the portal with the given capacity settings."""
     monkeypatch.setenv("MAX_CONCURRENT", str(max_concurrent))
     monkeypatch.setenv("QUEUE_TIMEOUT_MS", str(queue_timeout_ms))
     monkeypatch.setenv("MIN_DELAY_MS", str(delay_ms))
@@ -52,14 +46,11 @@ def test_a_queued_request_is_served_once_a_slot_frees(monkeypatch):
 
     busy.join()
     assert response.status_code == 200
-    # It had to wait for the first request before doing its own work, so the
-    # latency a user sees genuinely grows under load.
+    # Queue wait + own work: latency grows under load.
     assert waited >= 0.2
 
 
 def test_health_stays_fast_while_the_replica_is_saturated(monkeypatch):
-    # Docker's healthcheck must not fail just because the replica is busy --
-    # otherwise load would get replicas pulled out of nginx mid-spike.
     portal = load_portal(monkeypatch, max_concurrent=1, queue_timeout_ms=2000, delay_ms=500)
     busy = occupy_slot(portal)
 

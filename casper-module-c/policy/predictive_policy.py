@@ -1,28 +1,16 @@
-"""
-CASPER predictive scheduler (Module C).
+"""Predictive scheduler: scales from a Prediction's calendar, not live traffic.
 
-This is the part that makes CASPER *predictive* rather than just a scale
-controller. It reads a Prediction (Module B's output) and schedules capacity
-changes off the calendar -- not off live traffic:
+    at ramp_start -> scale up to predicted_peak_replicas
+    at ramp_end   -> scale down to POST_EVENT_FLOOR_REPLICAS
 
-    at ramp_start  ->  scale UP to predicted_peak_replicas   (before traffic)
-    at ramp_end    ->  scale DOWN to POST_EVENT_FLOOR_REPLICAS (gracefully)
+The PLANNED lines logged here and the executed actions in
+logs/scale_actions.jsonl form the predicted -> planned -> executed audit trail.
 
-Run it standalone:
+Usage:
+    python policy/predictive_policy.py [prediction.json]
 
-    python policy/predictive_policy.py                       # uses the sample
-    python policy/predictive_policy.py path/to/prediction.json
-
-For a demo you do not want to wait hours for, generate a time-shifted copy of
-the prediction first (see scripts/make_demo_prediction.py) and point this
-script at that file:
-
-    python scripts/make_demo_prediction.py --up-in 10 --down-in 60
-    python policy/predictive_policy.py policy/demo_prediction.json
-
-The "planned" lines printed here plus the "executed" lines the controller
-writes to logs/scale_actions.jsonl together form Module C's required
-predicted-event -> planned-action -> executed-action trail.
+For a live demo, time-shift a prediction first with
+scripts/make_demo_prediction.py.
 """
 
 import json
@@ -34,7 +22,6 @@ from pathlib import Path
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.date import DateTrigger
 
-# Make `controller` importable when this file is run directly from anywhere.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -43,15 +30,7 @@ from controller.scale_controller import scale_to  # noqa: E402
 
 DEFAULT_PREDICTION_PATH = PROJECT_ROOT / "policy" / "sample_prediction.json"
 
-# How many replicas to keep running after the event window closes.
-#
-# Deliberately a named constant, not a magic number, so the team can tune it.
-# Note on "drain, don't kill": scale_to() finishes by reloading nginx rather
-# than restarting it, so requests already in flight complete on the old
-# config instead of being cut off. Keeping this floor above 0 also means the
-# portal stays reachable straight after the event, when a trickle of late
-# traffic is still arriving. Dropping to 0 here would be a hard cutoff and is
-# not what the project means by a graceful scale-down.
+# Kept above 0 so late traffic after the window is still served.
 POST_EVENT_FLOOR_REPLICAS = 2
 
 logging.basicConfig(
@@ -61,17 +40,21 @@ logging.basicConfig(
 )
 log = logging.getLogger("casper.policy")
 
-# APScheduler's own INFO chatter ("Adding job tentatively...", "Removed job...")
-# buries our PLANNED/EXECUTING lines during a demo. Warnings still get through.
+# APScheduler's INFO chatter buries the PLANNED/EXECUTING lines.
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 
 def load_prediction(path: Path) -> dict:
-    """
-    Read a Prediction JSON file and parse its timestamps.
+    """Read a Prediction file (frozen schema) and parse its timestamps.
 
-    The Prediction schema is a frozen contract with Module B -- field names
-    and types must not be changed here.
+    Args:
+        path: Prediction JSON file.
+
+    Returns:
+        The prediction with ramp_* fields as timezone-aware datetimes.
+
+    Raises:
+        ValueError: If a required field is missing.
     """
     with path.open(encoding="utf-8") as handle:
         raw = json.load(handle)
@@ -91,9 +74,8 @@ def load_prediction(path: Path) -> dict:
             )
         )
 
-    # fromisoformat handles the "+05:30" IST offset the schema uses, so the
-    # parsed datetimes stay timezone-aware and APScheduler fires at the right
-    # wall-clock moment regardless of the laptop's own timezone.
+    # Keeping the +05:30 offset makes jobs fire at the right moment whatever
+    # the laptop's timezone.
     return {
         "event_id": raw["event_id"],
         "predicted_peak_replicas": int(raw["predicted_peak_replicas"]),
@@ -104,13 +86,13 @@ def load_prediction(path: Path) -> dict:
 
 
 def scale_up_for_event(event_id: str, peak_replicas: int) -> None:
-    """Fired at ramp_start: provision peak capacity before traffic arrives."""
+    """Job fired at ramp_start: provision peak capacity ahead of traffic."""
     log.info("EXECUTING scale-up for %s -> %d replicas", event_id, peak_replicas)
     scale_to(peak_replicas, source="predictive")
 
 
 def scale_down_after_event(event_id: str) -> None:
-    """Fired at ramp_end: return to the post-event floor, gracefully."""
+    """Job fired at ramp_end: drain back to the post-event floor."""
     log.info(
         "EXECUTING scale-down for %s -> %d replicas",
         event_id,
@@ -120,12 +102,17 @@ def scale_down_after_event(event_id: str) -> None:
 
 
 def schedule_prediction(prediction: dict, scheduler) -> int:
-    """
-    Register the scale-up and scale-down jobs for one prediction.
+    """Register the scale-up and scale-down jobs for one prediction.
 
-    Returns the number of jobs actually scheduled. Actions whose time has
-    already passed are skipped with a warning rather than fired immediately,
-    so an old prediction file cannot silently rescale the stack.
+    Actions already in the past are skipped, not fired, so a stale file
+    cannot rescale the stack.
+
+    Args:
+        prediction: Output of load_prediction().
+        scheduler: An APScheduler scheduler.
+
+    Returns:
+        Number of jobs scheduled (0-2).
     """
     event_id = prediction["event_id"]
     peak = prediction["predicted_peak_replicas"]
@@ -141,7 +128,6 @@ def schedule_prediction(prediction: dict, scheduler) -> int:
         prediction["ramp_peak"].isoformat(),
     )
 
-    # --- planned action 1: scale up ---
     if prediction["ramp_start"] > now:
         scheduler.add_job(
             scale_up_for_event,
@@ -164,7 +150,6 @@ def schedule_prediction(prediction: dict, scheduler) -> int:
             prediction["ramp_start"].isoformat(),
         )
 
-    # --- planned action 2: scale down ---
     if prediction["ramp_end"] > now:
         scheduler.add_job(
             scale_down_after_event,
@@ -190,15 +175,18 @@ def schedule_prediction(prediction: dict, scheduler) -> int:
 
 
 def main() -> int:
-    """Load a prediction, schedule its actions, and wait for them to fire."""
+    """Load a prediction, schedule its jobs and block until interrupted.
+
+    Returns:
+        Process exit code.
+    """
     if len(sys.argv) > 2:
         print("Usage: python policy/predictive_policy.py [prediction.json]")
         return 1
 
     path = Path(sys.argv[1]) if len(sys.argv) == 2 else DEFAULT_PREDICTION_PATH
     if not path.is_absolute():
-        # Allow both "policy/demo_prediction.json" from the project root and a
-        # path relative to wherever the team happens to be standing.
+        # Resolve against the project root first, then the working directory.
         candidate = (PROJECT_ROOT / path).resolve()
         path = candidate if candidate.exists() else path.resolve()
 
@@ -215,7 +203,7 @@ def main() -> int:
 
     log.info("Scheduler running. Press Ctrl+C to stop.")
     try:
-        scheduler.start()  # blocks until the process is interrupted
+        scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         log.info("Scheduler stopped by user.")
     return 0

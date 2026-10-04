@@ -1,17 +1,10 @@
-"""
-Demo-only helper: write a copy of a Prediction with its timestamps shifted to
-"a few seconds from now", so the predictive policy can be demonstrated live
-instead of waiting for a real exam-result date.
+"""Write a copy of a Prediction shifted to fire a few seconds from now.
 
-This is deliberately kept OUT of predictive_policy.py: the policy's
-schema-reading logic must stay honest about real event times. This script only
-produces a different input file for it.
+Lets the predictive policy be demonstrated live instead of on the real event
+date. Kept separate from the policy so the policy only ever reads real times.
 
-    python scripts/make_demo_prediction.py                    # up in 15s, down in 90s
+Examples:
     python scripts/make_demo_prediction.py --up-in 10 --down-in 60 --peak 4
-
-Then:
-
     python policy/predictive_policy.py policy/demo_prediction.json
 """
 
@@ -26,6 +19,7 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "policy" / "demo_prediction.json"
 
 
 def main() -> None:
+    """Parse arguments and write the shifted prediction."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--source",
@@ -66,12 +60,10 @@ def main() -> None:
     with args.source.open(encoding="utf-8") as handle:
         prediction = json.load(handle)
 
-    # Local time WITH the machine's timezone offset attached, so the output
-    # still matches the schema's ISO-8601-with-offset format.
+    # Local time with its offset, to keep the schema's ISO-8601-with-offset form.
     now = datetime.now().astimezone()
     ramp_start = now + timedelta(seconds=args.up_in)
     ramp_end = now + timedelta(seconds=args.down_in)
-    # Put the (informational) peak halfway through the window.
     ramp_peak = ramp_start + (ramp_end - ramp_start) / 2
 
     prediction["ramp_start"] = ramp_start.isoformat()

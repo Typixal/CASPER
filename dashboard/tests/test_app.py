@@ -1,10 +1,4 @@
-"""Tests for the dashboard's probe controls.
-
-During Module D's experiment the dashboard's own latency probe must not add
-traffic to the very thing being measured. Starting it switched off is not
-enough -- one click on the masthead button turned it back on mid-run. So
--Compare also LOCKS it.
-"""
+"""Tests for the dashboard's probe lock and chart route."""
 
 import importlib
 
@@ -45,8 +39,6 @@ def test_the_lock_is_reported_so_the_ui_can_disable_the_button(monkeypatch):
     assert dash.probe_locked() is True
 
 
-# --- Module D result charts ------------------------------------------------
-
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
 
 
@@ -69,7 +61,6 @@ def test_a_result_chart_is_served_as_a_png(results_app):
 
 
 def test_only_png_charts_are_served(results_app):
-    # The route exists to show the report's charts, not to expose files.
     assert results_app.get("/api/results/comparison.json").status_code == 404
 
 

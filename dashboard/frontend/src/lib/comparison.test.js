@@ -29,8 +29,7 @@ describe("describeComparison", () => {
   })
 
   it("reads as a sentence, without repeating words", () => {
-    // The plain term once read "server time used", which produced
-    // "13% more server time used — the price of ..." on screen.
+    // Guards against the label doubling up inside the sentence.
     const text = describeComparison(realRun).points.join(" ")
 
     expect(text).toMatch(/13% more server time —/)

@@ -3,40 +3,23 @@
     Launches the whole CASPER demo with one command, and cleans up after itself.
 
 .DESCRIPTION
-    Brings up everything needed for a Phase I demo, in order:
+    Steps:
+      1. Ensure Docker is running (starts Docker Desktop if needed)
+      2. Create missing Python venvs
+      3. Build the portal image (first run or -Build)
+      4. Scale the portal to -Replicas
+      5. Start the dashboard and open the browser
+      6. -Demo: Module A validates events, Module B predicts, Module C
+         schedules a time-shifted copy of one prediction
+      7. -Compare: Module D's reactive-vs-predictive experiment
 
-      1. Checks Docker is running (starts Docker Desktop and waits, if not)
-      2. Creates the Python virtual environments if they are missing
-      3. Builds the portal image (first run, or with -Build)
-      4. Scales the portal to a starting replica count
-      5. Opens the live dashboard in its own window, then in the browser
-      6. -Demo: runs the real pipeline end to end --
-            Module A validates the event dataset,
-            Module B turns it into Predictions,
-            Module C schedules a time-shifted copy of one of them,
-         so the scale-up fires during the demo from B's actual output
-      7. -Compare: runs Module D's experiment instead -- the same exam-day
-         traffic replayed twice through k6, once with the reactive baseline
-         scaling and once with CASPER's predictive policy, then writes the
-         comparison to module-d-evaluation\results\ and the dashboard
+    With no arguments, an interactive menu chooses the mode.
 
-    Then it STAYS IN THE FOREGROUND and waits. Press Ctrl+C (or close this
-    window) and it tears everything back down: dashboard, policy, and the
-    containers. Nothing is left running to eat memory after the demo.
-
-    Use -Detach if you deliberately want it to launch and exit, leaving the
-    demo up; you are then responsible for running `.\run-demo.ps1 -Stop`.
-
-    Teardown is deliberately thorough. It stops:
-      - the dashboard, policy and comparison processes this run started
-        (tracked by PID)
-      - any ORPHANED python or k6 process whose command line points inside
-        this repo (a window closed by hand, a previous run that lost its PID
-        file, a k6 run or reactive scaler the comparison started)
-      - whatever is listening on the dashboard port
-      - every container in the Module C compose project, plus orphans
-    It never touches processes belonging to anything else on the machine --
-    the command line has to point inside this repo folder.
+    Stays in the foreground; Ctrl+C tears down everything it started:
+    tracked processes, orphaned CASPER python/k6 processes, the dashboard
+    port listener and the Module C containers. Only CASPER's own entry-point
+    scripts are matched, never other processes. -Detach exits instead and
+    leaves teardown to -Stop.
 
 .PARAMETER Replicas
     Starting replica count. Default 2.
@@ -132,7 +115,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# --- Paths -----------------------------------------------------------------
 $Root      = $PSScriptRoot
 $ModuleA   = Join-Path $Root "module-a-ingestion"
 $ModuleB   = Join-Path $Root "module-b-estimation"
@@ -151,13 +133,17 @@ $K6Exe           = Join-Path $ModuleD   "tools\k6.exe"
 $DashboardPort = 8050
 $PortalPort    = 8080
 
-# --- Small helpers ---------------------------------------------------------
+# Console output helpers.
 function Write-Step { param([string]$Text) Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Write-Ok   { param([string]$Text) Write-Host "    $Text" -ForegroundColor Green }
 function Write-Info { param([string]$Text) Write-Host "    $Text" -ForegroundColor Gray }
 function Write-Warn { param([string]$Text) Write-Host "    $Text" -ForegroundColor Yellow }
 
 function Test-Port {
+    <#
+    .SYNOPSIS
+        True if something accepts TCP connections on localhost:$Port.
+    #>
     param([int]$Port)
     $client = New-Object Net.Sockets.TcpClient
     try {
@@ -171,6 +157,10 @@ function Test-Port {
 }
 
 function Wait-Port {
+    <#
+    .SYNOPSIS
+        Poll Test-Port until it succeeds or the timeout passes; returns the outcome.
+    #>
     param([int]$Port, [int]$TimeoutSeconds = 30)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
@@ -181,6 +171,10 @@ function Wait-Port {
 }
 
 function Test-Docker {
+    <#
+    .SYNOPSIS
+        True if the Docker daemon answers.
+    #>
     try {
         docker info --format "{{.ServerVersion}}" 2>$null | Out-Null
         return $LASTEXITCODE -eq 0
@@ -190,11 +184,19 @@ function Test-Docker {
 }
 
 function Save-Pids {
+    <#
+    .SYNOPSIS
+        Record started process ids in the pid file, for teardown.
+    #>
     param([hashtable]$Pids)
     $Pids | ConvertTo-Json | Set-Content -Path $PidFile -Encoding utf8
 }
 
 function Get-SavedPids {
+    <#
+    .SYNOPSIS
+        Read the pid file as a hashtable; empty if missing or unreadable.
+    #>
     if (-not (Test-Path $PidFile)) { return @{} }
     try {
         $raw = Get-Content $PidFile -Raw | ConvertFrom-Json
@@ -206,26 +208,17 @@ function Get-SavedPids {
     }
 }
 
-# ---------------------------------------------------------------------------
-# Teardown
-# ---------------------------------------------------------------------------
-# CASPER's own entry points. Only processes running one of these are ever
-# swept. "Any python whose command line mentions this repo" was too broad: an
-# IDE extension (VS Code's Black formatter, a language server) running from a
-# project venv matches that too, and the sweep killed it.
+# Only these entry points are swept; matching on the repo path alone also
+# caught IDE tooling running from project venvs.
 $CasperScripts = '(app|predictive_policy|reactive_baseline|run_comparison|scale_controller|loader|estimate|make_demo_prediction)\.py'
 
 function Get-CasperProcesses {
     <#
+    .SYNOPSIS
         CASPER's own python and k6 processes, and nothing else.
-
-        A process qualifies only if its command line points inside THIS repo
-        AND runs one of CASPER's entry-point scripts -- or it is the k6.exe
-        that lives in module-d-evaluation\tools. That still finds a dashboard,
-        policy, reactive scaler or comparison whose window was closed by hand
-        (PID file entry stale), while leaving editors, formatters, language
-        servers and anything else on the machine alone -- even when they run
-        from one of this project's venvs.
+    .DESCRIPTION
+        Matches python running one of $CasperScripts from inside this repo,
+        and the k6.exe in module-d-evaluation\tools.
     #>
     $escaped = [System.Management.Automation.WildcardPattern]::Escape($Root)
     $k6Escaped = [System.Management.Automation.WildcardPattern]::Escape($ModuleD)
@@ -240,6 +233,10 @@ function Get-CasperProcesses {
 }
 
 function Stop-ProcessSafely {
+    <#
+    .SYNOPSIS
+        Force-stop a process if it exists; returns whether it was stopped.
+    #>
     param([int]$ProcessId, [string]$Label)
     try {
         $proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
@@ -254,40 +251,40 @@ function Stop-ProcessSafely {
 }
 
 function Invoke-Teardown {
+    <#
+    .SYNOPSIS
+        Stop everything CASPER started: processes, port listener, containers.
+    .PARAMETER LeaveContainers
+        Keep the Module C containers running.
+    #>
     param([switch]$LeaveContainers)
 
     Write-Step "Cleaning up"
 
-    # 1. Processes this run started, by recorded PID.
+    # Processes this run started.
     $saved = Get-SavedPids
     foreach ($key in @("dashboard", "policy", "compare")) {
         if ($saved[$key]) { [void](Stop-ProcessSafely -ProcessId ([int]$saved[$key]) -Label $key) }
     }
     Remove-Item $PidFile -ErrorAction SilentlyContinue
 
-    # 2. Orphans: anything python or k6 running out of this repo that
-    #    survived -- the comparison's child processes (reactive scaler, k6,
-    #    Module C's policy), windows closed by hand, earlier runs.
+    # Orphans: the comparison's children, windows closed by hand, earlier runs.
     $orphans = @(Get-CasperProcesses)
     foreach ($orphan in $orphans) {
         [void](Stop-ProcessSafely -ProcessId $orphan.ProcessId -Label "orphaned $($orphan.Name)")
     }
     if ($orphans.Count -eq 0) { Write-Info "no orphaned python or k6 processes" }
 
-    # 3. Anything still holding the dashboard port.
     $listeners = @(Get-NetTCPConnection -LocalPort $DashboardPort -State Listen -ErrorAction SilentlyContinue)
     foreach ($listener in $listeners) {
         [void](Stop-ProcessSafely -ProcessId $listener.OwningProcess -Label "port $DashboardPort listener")
     }
 
-    # 4. Containers.
     if ($LeaveContainers) {
         Write-Info "leaving containers running (-KeepContainers)"
     } elseif (Test-Docker) {
         Push-Location $ModuleC
-        # docker compose writes its progress ("Container ... Stopping") to
-        # stderr, which $ErrorActionPreference = "Stop" would otherwise turn
-        # into a thrown error even on a completely successful teardown.
+        # Compose writes progress to stderr, which "Stop" would turn into an error.
         $previousPreference = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
         try {
@@ -311,6 +308,12 @@ function Invoke-Teardown {
 }
 
 function Initialize-Venv {
+    <#
+    .SYNOPSIS
+        Create a module's .venv and install its requirements, if missing.
+    .DESCRIPTION
+        pip's cache stays inside the module folder.
+    #>
     param([string]$Directory, [string]$PythonPath, [string]$Label)
 
     if (Test-Path $PythonPath) {
@@ -333,13 +336,10 @@ function Initialize-Venv {
     }
 }
 
-# ===========================================================================
-# No arguments: ask what to run
-# ===========================================================================
+# No arguments: ask what to run.
 . (Join-Path $Root "launcher\menu.ps1")
 
-# Any flag skips the menu, so scripted runs behave exactly as before. A
-# redirected stdin (no one at the keyboard) skips it too, rather than hang.
+# Skipped when stdin is redirected, rather than hang.
 if ($PSBoundParameters.Count -eq 0 -and -not [Console]::IsInputRedirected) {
     $menu = Invoke-LauncherMenu -Events @(Get-MenuEvents -EventsPath (Join-Path $ModuleA "events.json"))
     if (-not $menu.Go) {
@@ -353,32 +353,22 @@ if ($PSBoundParameters.Count -eq 0 -and -not [Console]::IsInputRedirected) {
     }
 }
 
-# ===========================================================================
-# Shutdown-only path
-# ===========================================================================
 if ($Stop) {
     Write-Host "`nCASPER -- shutting the demo down" -ForegroundColor White
     Invoke-Teardown -LeaveContainers:$KeepContainers
     exit 0
 }
 
-# ===========================================================================
-# Startup
-# ===========================================================================
 Write-Host "`nCASPER -- Civic-event-Aware Scheduling for Predictive Elastic Resources" -ForegroundColor White
 Write-Host "Starting the local demo" -ForegroundColor Gray
 
-# -Demo runs CASPER's predictive policy against the live stack; -Compare runs
-# the reactive baseline AND the predictive policy itself, one after the
-# other. Running both at once would put two brains on one knob and void the
-# experiment, so refuse up front rather than produce meaningless numbers.
+# Both drive the scaling knob; together they would void the experiment.
 if ($Demo -and $Compare) {
     Write-Host "`n-Demo and -Compare cannot run together: both drive the scaling knob.`n" -ForegroundColor Red
     exit 1
 }
 
-# Clear out anything left over from a previous run before starting a new one,
-# so replicas and dashboards never stack up across runs.
+# Clear leftovers from earlier runs so nothing stacks up.
 $leftovers = @(Get-CasperProcesses)
 if ($leftovers.Count -gt 0) {
     Write-Step "Found $($leftovers.Count) leftover process(es) from an earlier run"
@@ -387,7 +377,7 @@ if ($leftovers.Count -gt 0) {
     }
 }
 
-# --- 1. Docker -------------------------------------------------------------
+# 1. Docker
 Write-Step "Checking Docker"
 if (Test-Docker) {
     Write-Ok "Docker daemon is up"
@@ -419,7 +409,7 @@ if (Test-Docker) {
     Write-Ok "Docker daemon is up"
 }
 
-# --- 2. Virtual environments ----------------------------------------------
+# 2. Virtual environments
 Write-Step "Checking Python environments"
 Initialize-Venv -Directory $ModuleC -PythonPath $ModuleCPython -Label "Module C"
 if (-not $NoDashboard) {
@@ -439,7 +429,7 @@ if ($Compare) {
     Write-Ok "k6 present"
 }
 
-# --- 3 & 4. Build and scale -----------------------------------------------
+# 3-4. Build and scale
 Push-Location $ModuleC
 try {
     $imageExists = (docker images -q casper-module-c-portal 2>$null)
@@ -462,16 +452,13 @@ try {
 $pids = @{}
 
 try {
-    # --- 5. Dashboard ------------------------------------------------------
+    # 5. Dashboard
     if (-not $NoDashboard) {
         Write-Step "Starting the dashboard"
         if (Test-Port -Port $DashboardPort) {
             Write-Warn "port $DashboardPort is already in use -- reusing whatever is there"
         } else {
-            # During the experiment the dashboard's own latency probe would
-            # add traffic to the very thing being measured, so start it off
-            # AND locked -- off alone was undone by one click on the masthead
-            # button mid-run.
+            # The probe would add traffic to the measured run: start it off and locked.
             if ($Compare) {
                 $env:CASPER_DASH_PROBE = "0"
                 $env:CASPER_DASH_PROBE_LOCKED = "1"
@@ -495,7 +482,7 @@ try {
         }
     }
 
-    # --- 6. The real pipeline: A -> B -> C --------------------------------
+    # 6. Pipeline A -> B -> C
     if ($Demo) {
         if ($DownIn -le $UpIn) {
             throw "-DownIn ($DownIn) must be greater than -UpIn ($UpIn)"
@@ -526,8 +513,7 @@ try {
         $predicted = (Get-Content $predictionFile -Raw | ConvertFrom-Json).predicted_peak_replicas
 
         Write-Step "Module C: scheduling B's prediction for $EventId"
-        # Real event dates are months away, so shift B's prediction to start in
-        # -UpIn seconds. Its replica count is B's, capped by -Peak for a laptop.
+        # Shift B's prediction to start in -UpIn seconds; cap replicas at -Peak.
         $shiftArgs = @("--source", $predictionFile, "--up-in", $UpIn, "--down-in", $DownIn)
         if ($Peak -gt 0) {
             $shiftArgs += @("--peak", $Peak)
@@ -554,7 +540,7 @@ try {
         Write-Info "scale UP in ~$UpIn s to $Peak replicas, scale DOWN in ~$DownIn s"
     }
 
-    # --- 7. Module D: the experiment --------------------------------------
+    # 7. Module D experiment
     if ($Compare) {
         Write-Step "Module D: reactive vs predictive comparison"
         & $ModuleDPython (Join-Path $ModuleD "run_comparison.py") --dry-run --peak-rps $PeakRps
@@ -571,7 +557,6 @@ try {
 
     Save-Pids -Pids $pids
 
-    # --- Summary -----------------------------------------------------------
     Write-Host "`n---------------------------------------------------------------" -ForegroundColor DarkGray
     Write-Host " CASPER demo is up" -ForegroundColor White
     Write-Host "---------------------------------------------------------------" -ForegroundColor DarkGray
@@ -601,8 +586,7 @@ try {
     Write-Host "`n  Press Ctrl+C to shut everything down and clean up." -ForegroundColor Cyan
     Write-Host ""
 
-    # Block here. The finally below runs on Ctrl+C, so the demo never
-    # outlives this window unless -Detach was passed.
+    # Wait; the finally below tears down on Ctrl+C.
     while ($true) { Start-Sleep -Seconds 1 }
 } finally {
     if (-not $Detach) {

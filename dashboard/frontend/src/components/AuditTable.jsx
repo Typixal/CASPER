@@ -2,9 +2,9 @@ import { ChevronRight } from "lucide-react"
 import { sourceColor, sourceLabel, timeOnly } from "../lib/format"
 
 /**
- * The exact newest-first log. The timeline chart above is the primary view;
- * this is kept as a collapsible detail for anyone who wants precise values
- * (which replicas, exact requested-vs-healthy counts).
+ * Collapsible newest-first audit log with exact requested/healthy counts.
+ * @param {object} props
+ * @param {object[]} props.actions Entries from scale_log.actions.
  */
 export default function AuditTable({ actions }) {
   if (!actions?.length) return null

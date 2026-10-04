@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from "react"
 
 /**
- * Subscribes to the Flask backend's /stream SSE endpoint and exposes the
- * latest snapshot from collector.collect(). This is the ONLY place the
- * frontend talks to the backend for live data -- every component below
- * reads from the object this hook returns.
- *
- * Backend contract (unchanged by this redesign): each `data:` event is the
- * full JSON snapshot collector.py produces (generated_at, docker, summary,
- * nginx, scale_log, prediction, probe, probe_summary, modules, paths), or
- * {generated_at: null, fatal_error} / {generated_at: null, starting: true}.
+ * Subscribe to the backend's /stream SSE endpoint.
+ * Each event is a full collector.collect() snapshot, or
+ * {generated_at: null, fatal_error | starting}.
+ * @returns {{state: object, connected: boolean}}
  */
 export function useLiveState() {
   const [state, setState] = useState({ generated_at: null, starting: true })
@@ -26,8 +21,7 @@ export function useLiveState() {
       try {
         setState(JSON.parse(event.data))
       } catch (err) {
-        // A malformed payload should never take the whole dashboard down --
-        // keep showing the last good state and log for debugging.
+        // Keep the last good state on a malformed payload.
         console.error("useLiveState: could not parse SSE payload", err)
       }
     }
@@ -43,10 +37,9 @@ export function useLiveState() {
 }
 
 /**
- * Flips the dashboard's own latency probe on/off via the existing
- * POST /api/probe/toggle endpoint. Returns the toggle function; the actual
- * enabled/disabled state comes back on the next SSE snapshot (state.probe.enabled),
- * so this hook does not track its own local boolean.
+ * Toggle the latency probe via POST /api/probe/toggle. The new state arrives
+ * on the next snapshot (state.probe.enabled), so none is kept here.
+ * @returns {{toggle: () => Promise<void>, pending: boolean}}
  */
 export function useProbeToggle() {
   const [pending, setPending] = useState(false)

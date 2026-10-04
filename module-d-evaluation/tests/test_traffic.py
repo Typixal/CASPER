@@ -24,8 +24,7 @@ def test_the_curve_decays_after_the_peak():
 
 
 def test_the_ramp_starts_after_the_quiet_period():
-    # The predictive policy schedules its scale-up against this offset, so it
-    # has to be exactly where the k6 ramp begins.
+    # The predictive scale-up is scheduled against this offset.
     config = traffic.k6_config(peak_rps=250)
     first = config["stages"][0]
 
@@ -41,7 +40,6 @@ def test_total_duration_is_the_sum_of_the_stages():
 
 
 def test_replicas_needed_uses_the_documented_conversion_and_rounds_up():
-    # Same rule as Module B: demand / per-replica capacity, always rounded up.
     assert traffic.replicas_needed(peak_rps=250, per_replica_rps=4000 / 60) == 4
 
 

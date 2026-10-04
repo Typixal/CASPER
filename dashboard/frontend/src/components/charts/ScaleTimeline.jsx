@@ -11,13 +11,10 @@ import { History } from "lucide-react"
 import { sourceColor, sourceLabel, timeOnly } from "../../lib/format"
 
 /**
- * Capacity over time — a staircase of every scale action, oldest to newest
- * (a deliberate inversion of the newest-first audit table below: a timeline
- * reads as a story). Step interpolation is the honest shape here: replica
- * count holds flat between actions and jumps at one, it does not glide.
- *
- * Each point is colored by which brain asked for it, so "CASPER scaled up
- * before the traffic" is visible as a blue step that lands early.
+ * Replica count over time as a step chart, each point coloured by its source.
+ * Step interpolation because the count jumps at an action, it does not glide.
+ * @param {object} props
+ * @param {object} props.scaleLog Snapshot scale_log.
  */
 function SourceDot({ cx, cy, payload }) {
   if (cx == null || cy == null) return null

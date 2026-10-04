@@ -1,15 +1,10 @@
-# Tests for the launcher's interactive menu (Pester 3.4, ships with Windows).
-#
+# Pester 3.4 tests for menu.ps1, driven by scripted answers.
 #     Invoke-Pester .\launcher
-#
-# Every prompt goes through an injected reader, so the menu is driven here by
-# a scripted list of answers -- no console, no Docker.
 
 . (Join-Path $PSScriptRoot "menu.ps1")
 
 function New-Reader {
-    # Hands out the scripted answers in order; fails loudly if the menu asks
-    # more questions than the test expected.
+    # Returns the answers in order; throws if the menu asks one question too many.
     param([string[]]$Answers)
     $queue = New-Object System.Collections.Queue
     foreach ($answer in $Answers) { $queue.Enqueue($answer) }

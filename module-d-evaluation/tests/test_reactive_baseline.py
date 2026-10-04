@@ -1,9 +1,4 @@
-"""Tests for the reactive baseline's scaling decisions.
-
-The baseline must be an HONEST stand-in for a conventional auto-scaler: it
-reacts to what it measures, with the usual guards (consecutive breaches,
-cooldown, min/max). It must not be artificially weakened to flatter CASPER.
-"""
+"""Tests for the reactive baseline's scaling decisions and control loop."""
 
 import reactive_baseline as rb
 
@@ -29,7 +24,6 @@ def make_scaler(**overrides):
 
 
 def test_a_single_slow_reading_does_not_trigger_a_scale_up():
-    # One blip is not a trend; real auto-scalers require a sustained breach.
     scaler = make_scaler()
 
     assert scaler.decide(SLOW, current=1, now=0) == 1
@@ -74,8 +68,7 @@ def test_scale_down_never_goes_below_the_minimum():
 
 
 def test_no_further_scaling_inside_the_cooldown_after_a_scale_action():
-    # Newly added replicas take seconds to become healthy; scaling again
-    # before they land is the classic thrash real auto-scalers guard against.
+    # New replicas need time to become healthy; acting again first is thrash.
     scaler = make_scaler(cooldown_s=15)
     scaler.decide(SLOW, current=1, now=0)
     assert scaler.decide(SLOW, current=1, now=5) == 3  # scaled at t=5
@@ -97,9 +90,6 @@ def test_the_middle_band_holds_steady():
     scaler = make_scaler()
     for tick in range(10):
         assert scaler.decide(MIDDLE, current=3, now=tick * 5) == 3
-
-
-# --- the control loop ---------------------------------------------------------
 
 
 class FakeClock:
@@ -145,8 +135,7 @@ def test_the_loop_scales_up_after_sustained_slow_readings():
 
 
 def test_the_loop_trusts_the_actual_healthy_count_not_the_request():
-    # Module C's scale_to reports how many replicas actually came up healthy.
-    # If only 2 of the requested 3 did, the loop must carry on from 2.
+    # Only 2 of the requested 3 came up; the loop must continue from 2.
     final = run_for(2, [SLOW, SLOW], scale=lambda n: 2)
 
     assert final == 2
@@ -164,9 +153,6 @@ def test_the_loop_stops_when_asked():
     final = run_for(0, [], scale=lambda n: n, start=3)
 
     assert final == 3
-
-
-# --- command line ---------------------------------------------------------------
 
 
 def test_cli_defaults_probe_the_nginx_entrypoint_every_five_seconds():

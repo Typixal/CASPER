@@ -60,6 +60,12 @@ function Chart({ src, alt, caption }) {
   )
 }
 
+/**
+ * Module D's result: plain summary, results table, fairness note and charts.
+ * @param {object} props
+ * @param {object|null} props.comparison Output of collector.read_comparison().
+ * @param {boolean} [props.technical=false]
+ */
 export default function ExperimentPage({ comparison, technical = false }) {
   const story = describeComparison(comparison, technical)
 

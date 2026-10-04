@@ -1,9 +1,14 @@
 import { motion } from "framer-motion"
 
 /**
- * Shared panel shell: subtle raised surface, icon + title header, optional
- * tag and right-aligned slot. Fades/slides in once on mount so the page
- * assembles itself rather than snapping into place.
+ * Shared panel shell with icon + title header, optional tag and right slot.
+ * Animates in once on mount.
+ * @param {object} props
+ * @param {Function} [props.icon] lucide icon component.
+ * @param {string} props.title
+ * @param {string} [props.tag]
+ * @param {*} [props.right] Right-aligned header content.
+ * @param {number} [props.delay=0] Entrance animation delay, seconds.
  */
 export default function Panel({ icon: Icon, title, tag, right, className = "", bodyClassName = "", children, delay = 0 }) {
   return (

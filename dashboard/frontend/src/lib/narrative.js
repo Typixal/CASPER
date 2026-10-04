@@ -1,19 +1,19 @@
-// Plain-English description of what the system is doing right now.
-//
-// The Overview page leads with this so a non-technical viewer gets the story
-// in one sentence before seeing any chart. Pure functions over the snapshot
-// the backend streams, so every situation the demo can be in is unit-tested.
+// One-sentence, plain-English description of what the system is doing now.
+// Pure functions over the streamed snapshot.
 
 import { term } from "./terms"
 
-// Readable names for the event families in Module A's dataset. Anything not
-// listed falls back to a tidied version of its id.
+// Readable names for Module A's event families; others fall back to the id.
 const KNOWN_EVENTS = {
   cbse_class12: "CBSE Class 12 results",
   kerala_plustwo_admission: "Kerala Plus Two admissions",
   ssc_cgl_result: "SSC CGL results",
 }
 
+/**
+ * @param {string} eventId e.g. "cbse_class12_2026".
+ * @returns {string} e.g. "CBSE Class 12 results 2026".
+ */
 export function eventName(eventId) {
   if (!eventId) return "the event"
   const match = eventId.match(/^(.*)_(\d{4})$/)
@@ -28,6 +28,10 @@ export function eventName(eventId) {
   return year ? `${name} ${year}` : name
 }
 
+/**
+ * @param {number} seconds
+ * @returns {string} Rounded human duration, e.g. "27 seconds", "3 minutes".
+ */
 export function humanDuration(seconds) {
   if (seconds === null || seconds === undefined) return "a moment"
   const s = Math.max(0, Math.round(seconds))
@@ -37,6 +41,12 @@ export function humanDuration(seconds) {
   return `${Math.round(m / 60)} hours`
 }
 
+/**
+ * Describe the current state of the demo.
+ * @param {object} state Latest snapshot.
+ * @param {boolean} [technical=false]
+ * @returns {{tone: string, headline: string, detail: string}}
+ */
 export function describeNow(state, technical = false) {
   const servers = term("replicas", technical)
 

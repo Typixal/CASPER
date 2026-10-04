@@ -22,6 +22,12 @@ function StatTile({ icon: Icon, label, value, sub, accent = "text-text", index =
   )
 }
 
+/**
+ * Row of headline numbers: servers ready/routed, last change, latency, log size.
+ * @param {object} props
+ * @param {object} props.state Latest snapshot.
+ * @param {boolean} [props.technical=false]
+ */
 export default function StatRail({ state, technical = false }) {
   const t = (plain, tech) => (technical ? tech : plain)
   const summary = state.summary ?? {}

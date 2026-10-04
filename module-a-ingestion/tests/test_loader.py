@@ -60,8 +60,6 @@ def test_load_events_rejects_a_non_positive_candidate_count(tmp_path):
 
 
 def test_load_events_rejects_a_date_without_a_timezone_offset(tmp_path):
-    # The frozen Event schema requires ISO 8601 *with* an offset -- Module C
-    # schedules against these instants, so a naive timestamp is ambiguous.
     path = write_dataset(tmp_path, [valid_event(date="2026-05-13T10:00:00")])
 
     with pytest.raises(loader.InvalidEventError) as excinfo:
@@ -118,7 +116,6 @@ def test_get_prior_events_resolves_ids_to_the_actual_events(tmp_path):
 
 
 def test_get_prior_events_returns_empty_when_the_event_has_no_history(tmp_path):
-    # This is the zero-history case CASPER exists for: a first-time event.
     path = write_dataset(tmp_path, [valid_event(prior_similar_event_ids=[])])
     events = loader.load_events(path)
 
@@ -137,8 +134,7 @@ def test_get_prior_events_raises_when_a_referenced_prior_is_missing(tmp_path):
 
 
 def test_load_events_rejects_duplicate_event_ids(tmp_path):
-    # get_event returns the first match, so duplicates would silently shadow
-    # one another rather than failing loudly.
+    # get_event returns the first match, so a duplicate would be silently shadowed.
     path = write_dataset(
         tmp_path,
         [valid_event(event_id="cbse_class12_2026"), valid_event(event_id="cbse_class12_2026")],
@@ -150,12 +146,7 @@ def test_load_events_rejects_duplicate_event_ids(tmp_path):
     assert "cbse_class12_2026" in str(excinfo.value)
 
 
-# --- the dataset Module A actually ships -----------------------------------
-
-
 def test_the_shipped_dataset_loads_and_validates():
-    # load_events() with no argument reads the module's own events.json, so
-    # Module B can consume the dataset without knowing where it lives.
     events = loader.load_events()
 
     assert len(events) == 6
@@ -165,8 +156,6 @@ def test_every_prior_reference_in_the_shipped_dataset_resolves():
     events = loader.load_events()
 
     for event in events:
-        # Raises EventNotFoundError if the dataset references a prior that
-        # isn't in it -- a dangling reference would break Module B.
         loader.get_prior_events(events, event)
 
 
@@ -181,8 +170,7 @@ def test_the_shipped_dataset_covers_the_three_event_types():
 
 
 def test_the_shipped_dataset_gives_every_current_event_a_prior():
-    # Module B's comparable-peak signal needs history to work with, so each
-    # of the three current events must reference a prior-year event.
+    # Module B's growth signal needs a prior for each current-year event.
     events = loader.load_events()
 
     with_priors = [e for e in events if e["prior_similar_event_ids"]]

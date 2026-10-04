@@ -1,8 +1,6 @@
 import { BookOpen, CalendarDays, FlaskConical, LayoutDashboard, Server } from "lucide-react"
 
-// The dashboard's pages, in story order: what's happening -> what's coming ->
-// the machinery -> the proof -> how it all fits. Overview is where a
-// non-technical viewer lands.
+// Pages in story order; the first is the landing page.
 export const PAGES = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "schedule", label: "Event schedule", icon: CalendarDays },

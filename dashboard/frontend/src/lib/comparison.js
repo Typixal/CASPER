@@ -1,8 +1,5 @@
-// Plain-English reading of Module D's experiment result.
-//
-// "p95 2063 ms vs 121 ms" means nothing to most of a projector audience;
-// "pages loaded 17x faster" does. Honest in both directions: it never claims
-// a win the numbers do not show, and it always states what CASPER cost.
+// Plain-English summary of Module D's result. Never claims a win the numbers
+// do not show, and always states what CASPER cost.
 
 import { term } from "./terms"
 
@@ -13,6 +10,12 @@ function timesFaster(slow, fast) {
   return ratio >= 10 ? Math.round(ratio).toString() : ratio.toFixed(1)
 }
 
+/**
+ * Describe the experiment result for the page.
+ * @param {object|null} c Output of collector.read_comparison().
+ * @param {boolean} [technical=false] Use engineering terms.
+ * @returns {{headline: string, points: string[]}|null} Null when there is no result.
+ */
 export function describeComparison(c, technical = false) {
   if (!c) return null
   const r = c.reactive

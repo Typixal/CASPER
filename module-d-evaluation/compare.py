@@ -1,8 +1,4 @@
-"""Module D -- turn raw k6 output into the reactive-vs-predictive comparison.
-
-The three headline metrics are the ones the project committed to in its
-needs metrics: response time, error rate, and % successful requests.
-"""
+"""Turn raw k6 output and the audit log into the reactive-vs-predictive comparison."""
 
 import json
 from datetime import datetime
@@ -14,22 +10,25 @@ from probe import percentile
 
 
 def summarize_k6(summary):
-    """Headline numbers from a k6 handleSummary() JSON document.
+    """Extract headline numbers from a k6 handleSummary() document.
 
-    Note on http_req_failed: it is a k6 "rate" metric over a boolean that is
-    true when a request FAILED. So its `passes` field counts failures and
-    `fails` counts successes. Reading the `rate` (share of requests that
-    failed) sidesteps that inverted naming entirely.
+    Args:
+        summary: Parsed k6 summary JSON.
+
+    Returns:
+        Dict with requests, median/p95/avg/max latency, error_rate,
+        success_pct and dropped.
     """
     metrics = summary["metrics"]
     duration = metrics["http_req_duration"]["values"]
+    # http_req_failed is a rate over "request failed", so its `passes` counts
+    # failures. `rate` avoids the inverted naming.
     error_rate = metrics["http_req_failed"]["values"]["rate"]
     dropped = metrics.get("dropped_iterations", {}).get("values", {}).get("count", 0)
     requests = metrics["http_reqs"]["values"]["count"]
 
-    # Success is measured against every candidate who TRIED, including the
-    # ones k6 could not even send on schedule (dropped). Leaving them out
-    # would flatter whichever strategy was more overloaded.
+    # Dropped iterations count as attempts; leaving them out flatters the
+    # more overloaded run.
     succeeded = requests * (1.0 - error_rate)
     attempted = requests + dropped
 
@@ -46,15 +45,16 @@ def summarize_k6(summary):
 
 
 def timeseries(csv_path, bucket_s=5):
-    """Bucket a k6 CSV export into per-interval latency and error rate.
+    """Bucket a k6 CSV export into per-interval p95 and error rate.
 
-    This is what shows WHEN each strategy hurt: an aggregate p95 hides
-    whether the pain was a ten-second blip or the whole ramp.
+    Args:
+        csv_path: k6 `--out csv` file.
+        bucket_s: Bucket width in seconds.
 
-    Returns {"start": unix seconds of the first sample, "buckets": [...]},
-    each bucket {"t", "requests", "p95_ms", "error_rate"}, with t in seconds
-    from the start. Buckets are contiguous; an interval with no requests has
-    p95_ms None rather than a misleading 0 ms.
+    Returns:
+        {"start": unix seconds of the first sample, "buckets": [...]}. Each
+        bucket is {"t", "requests", "p95_ms", "error_rate"} with t relative to
+        start. Buckets are contiguous; an empty one has p95_ms None, not 0.
     """
     raw = pd.read_csv(csv_path, usecols=["metric_name", "timestamp", "metric_value"])
     start = int(raw["timestamp"].min())
@@ -81,11 +81,17 @@ def timeseries(csv_path, bucket_s=5):
 
 
 def scale_events(log_path, start, end, sources):
-    """Scale actions from Module C's audit log inside one run's window.
+    """Read one run's scale actions from Module C's audit log.
 
-    Returns [{"t", "replicas", "source"}] with t in seconds from `start`
-    (unix seconds) and replicas = how many ACTUALLY came up healthy, which is
-    what served traffic -- not what was requested.
+    Args:
+        log_path: scale_actions.jsonl; a missing file yields no events.
+        start: Window start, unix seconds.
+        end: Window end, unix seconds.
+        sources: Sources to keep, e.g. {"reactive"}.
+
+    Returns:
+        [{"t", "replicas", "source"}] with t relative to start and replicas
+        the count that actually came up healthy.
     """
     events = []
     path = Path(log_path)
@@ -111,11 +117,15 @@ def scale_events(log_path, start, end, sources):
 
 
 def replica_seconds(events, initial, duration_s):
-    """Area under the replica-count step function: a cost proxy.
+    """Area under the replica-count step function, as a cost proxy.
 
-    Predictive scaling wins on latency by provisioning BEFORE the traffic,
-    which means paying for capacity that sits idle for a while. Reporting
-    replica-seconds keeps the comparison honest about that trade-off.
+    Args:
+        events: Scale events from scale_events().
+        initial: Replicas at t=0.
+        duration_s: Run length.
+
+    Returns:
+        Total replica-seconds.
     """
     total = 0.0
     current, since = initial, 0.0
@@ -126,7 +136,7 @@ def replica_seconds(events, initial, duration_s):
     return total
 
 
-# metric -> True when a HIGHER value is better
+# metric -> whether a higher value is better
 _METRICS = {
     "p95_ms": False,
     "error_rate": False,
@@ -136,16 +146,22 @@ _METRICS = {
 
 
 def _value(run, metric):
+    """Read one comparison metric from a run."""
     if metric == "replica_seconds":
         return run["replica_seconds"]
     return run["summary"][metric]
 
 
 def build_comparison(runs):
-    """Reactive vs predictive: both runs, a per-metric verdict, headline deltas.
+    """Compare the two runs metric by metric.
 
-    `runs` is {"reactive": {...}, "predictive": {...}}, each with "summary"
-    (summarize_k6), "replica_seconds", "events" and "series".
+    Args:
+        runs: {"reactive": run, "predictive": run}, each with "summary",
+            "replica_seconds", "events" and "series".
+
+    Returns:
+        Dict with the runs ("strategies"), a per-metric "verdict" and
+        "p95_reduction_pct".
     """
     reactive, predictive = runs["reactive"], runs["predictive"]
 
@@ -170,7 +186,15 @@ def build_comparison(runs):
 
 
 def write_reports(comparison, out_dir):
-    """Write comparison.json (machine-readable) and comparison.md (for the report)."""
+    """Write comparison.json and the markdown table comparison.md.
+
+    Args:
+        comparison: Output of build_comparison().
+        out_dir: Folder to write into; created if missing.
+
+    Returns:
+        The output folder.
+    """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 

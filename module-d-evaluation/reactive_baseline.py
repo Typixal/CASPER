@@ -1,18 +1,28 @@
-"""Module D -- the reactive baseline auto-scaler.
+"""Reactive baseline: a conventional latency-driven auto-scaler.
 
-The thing CASPER has to beat. It behaves the way a conventional latency-driven
-auto-scaler does: poll a live metric, scale up after a sustained breach, scale
-down after a sustained quiet period, with a cooldown so it does not thrash.
+Scales up after sustained p95 breaches and down after sustained calm, with a
+cooldown. The guards are standard practice, not a handicap; its only real
+weakness is that it reacts to load that has already arrived.
 
-It must stay an HONEST baseline. Every guard here (consecutive-breach
-requirement, cooldown, min/max) is standard practice in real auto-scalers,
-not a handicap added to make CASPER look good. Its one real limitation is the
-one the project is about: it can only react to load that has already arrived.
+Usage:
+    python reactive_baseline.py [--max 6] [--interval 5] ...
 """
 
 
 class ReactiveScaler:
-    """Pure decision logic. No I/O -- the clock is passed in on every call."""
+    """Pure scaling decision logic; the caller supplies the clock.
+
+    Args:
+        min_replicas: Lower bound.
+        max_replicas: Upper bound.
+        up_threshold_ms: p95 above this is a breach.
+        down_threshold_ms: p95 below this is calm.
+        up_after: Consecutive breaches before scaling up.
+        down_after: Consecutive calm ticks before scaling down.
+        step_up: Replicas added per scale-up.
+        step_down: Replicas removed per scale-down.
+        cooldown_s: Minimum seconds between scale actions.
+    """
 
     def __init__(
         self,
@@ -41,7 +51,16 @@ class ReactiveScaler:
         self._last_scaled_at = None
 
     def decide(self, p95_ms, current, now):
-        """Return the replica count to run, given this tick's p95 latency."""
+        """Choose the replica count for this tick.
+
+        Args:
+            p95_ms: Latest measured p95 latency.
+            current: Replicas running now.
+            now: Monotonic time in seconds.
+
+        Returns:
+            Target replica count (== current when no action is taken).
+        """
         if p95_ms > self.up_threshold_ms:
             self._breaches += 1
             self._calm = 0
@@ -49,7 +68,7 @@ class ReactiveScaler:
             self._calm += 1
             self._breaches = 0
         else:
-            # Between the thresholds: acceptable, so neither streak survives.
+            # Between thresholds: neither streak survives.
             self._breaches = 0
             self._calm = 0
 
@@ -69,6 +88,7 @@ class ReactiveScaler:
         return target
 
     def _cooling_down(self, now):
+        """True while within cooldown_s of the last scale action."""
         return (
             self._last_scaled_at is not None
             and now - self._last_scaled_at < self.cooldown_s
@@ -76,28 +96,35 @@ class ReactiveScaler:
 
 
 def run_loop(scaler, read_p95, scale, current, interval_s, should_stop, now, sleep):
-    """Poll, decide, scale -- until told to stop. Returns the final count.
+    """Probe, decide and scale until should_stop() is true.
 
-    Every side effect is passed in (`read_p95`, `scale`, the clock), so the
-    loop is testable without Docker and the real wiring lives in main().
+    Side effects are injected so the loop is testable without Docker.
 
-    `scale(n)` must return how many replicas ACTUALLY came up healthy. Module
-    C's scale_to re-derives that from Docker after every action, and the loop
-    carries on from the real number rather than the one it asked for.
+    Args:
+        scaler: A ReactiveScaler.
+        read_p95: Returns the current p95 in ms.
+        scale: Scales to n and returns the replicas actually healthy.
+        current: Starting replica count.
+        interval_s: Seconds between ticks.
+        should_stop: Returns True to end the loop.
+        now: Clock returning seconds.
+        sleep: Sleeps for the given seconds.
+
+    Returns:
+        The final replica count.
     """
     while not should_stop():
         p95 = read_p95()
         target = scaler.decide(p95, current=current, now=now())
         if target != current:
+            # Continue from what actually came up, not from what was asked for.
             current = scale(target)
         sleep(interval_s)
     return current
 
 
-# --- command line -----------------------------------------------------------
-
-
 def parse_args(argv):
+    """Parse command-line arguments."""
     import argparse
 
     parser = argparse.ArgumentParser(description="CASPER reactive baseline auto-scaler")
@@ -113,6 +140,7 @@ def parse_args(argv):
 
 
 def scaler_from_args(args):
+    """Build a ReactiveScaler from parsed arguments."""
     return ReactiveScaler(
         min_replicas=args.min,
         max_replicas=args.max,
@@ -122,11 +150,10 @@ def scaler_from_args(args):
 
 
 def main(argv=None):
-    """Live wiring: probe nginx, scale through Module C, tag source=reactive.
+    """Probe nginx and scale through Module C (source="reactive") until stopped.
 
-    Runs until terminated (Ctrl+C, or the comparison orchestrator stopping
-    it). Not unit-tested -- it needs Docker -- but every decision it makes
-    goes through run_loop and ReactiveScaler, which are.
+    Needs Docker, so it is not unit-tested; its decisions go through the
+    tested run_loop and ReactiveScaler.
     """
     import sys
     import time
@@ -146,7 +173,6 @@ def main(argv=None):
 
     def scale(n):
         print("[reactive] scaling to {}".format(n), flush=True)
-        # Same knob as CASPER, tagged so the audit log separates the brains.
         return len(controller.scale_to(n, source="reactive"))
 
     current = controller.current_replica_count()

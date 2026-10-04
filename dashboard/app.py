@@ -1,20 +1,17 @@
-"""
-CASPER live demo dashboard.
+"""Live demo dashboard: Flask backend serving snapshots over SSE.
 
-A small Flask app that shows, on one screen, what the CASPER demo is doing
-right now: how many portal replicas exist, which of them nginx is routing to,
-what the predictive policy has planned, and every scaling action as it lands
-in the audit log.
+Read-only: it observes Docker state, nginx.conf, the audit log and the
+Prediction files, and never scales anything. Runs on the host as its own
+process.
 
-    python dashboard/app.py        ->  http://localhost:8050
+Usage:
+    python app.py    # http://localhost:8050
 
-It is READ-ONLY by design. It observes the demo through the artifacts the
-system already writes (Docker state, nginx.conf, scale_actions.jsonl,
-the Prediction file) and never scales anything itself. Running it, or closing
-it, cannot affect a demo in progress.
-
-It runs on the host as its own process -- docker-compose.yml is untouched, so
-the tested Module C stack behaves exactly as before.
+Environment:
+    CASPER_DASH_REFRESH       snapshot interval, seconds (default 2)
+    CASPER_DASH_PORT          port (default 8050)
+    CASPER_DASH_PROBE         "0" starts with the latency probe off
+    CASPER_DASH_PROBE_LOCKED  "1" keeps the probe off; the toggle returns 409
 """
 
 import json
@@ -29,27 +26,23 @@ import collector
 
 app = Flask(__name__)
 
-# How often the background thread takes a fresh snapshot, in seconds.
 REFRESH_SECONDS = float(os.environ.get("CASPER_DASH_REFRESH", "2"))
 PORT = int(os.environ.get("CASPER_DASH_PORT", "8050"))
 
-# The probe sends one request per refresh to localhost:8080 to measure live
-# latency. Turn it off (from the UI, or with CASPER_DASH_PROBE=0) before a
-# Module D load test so it adds no traffic to the measured run.
+# The probe adds one request per refresh, so it must be off during a k6 run.
 _probe_enabled = os.environ.get("CASPER_DASH_PROBE", "1") != "0"
 
-# Locked during Module D's experiment (run-demo.ps1 -Compare). Starting the
-# probe switched off is not enough: one click on the masthead button turned
-# it back on mid-run, adding the dashboard's own requests to the traffic being
-# measured. Locked, the toggle refuses and the UI disables the button.
+# Set by run-demo.ps1 -Compare so a stray click cannot re-enable the probe mid-run.
 _probe_locked = os.environ.get("CASPER_DASH_PROBE_LOCKED", "0") == "1"
 
 
 def probe_enabled():
+    """Whether the latency probe is on."""
     return _probe_enabled
 
 
 def probe_locked():
+    """Whether the probe toggle is locked off."""
     return _probe_locked
 
 _state = {"generated_at": None, "starting": True}
@@ -57,7 +50,7 @@ _state_lock = threading.Lock()
 
 
 def _collect_loop():
-    """Background thread: refresh the snapshot on a fixed interval."""
+    """Refresh the shared snapshot every REFRESH_SECONDS, forever."""
     global _state
     while True:
         try:
@@ -74,24 +67,30 @@ def _collect_loop():
 
 
 def _current_state():
+    """Return the latest snapshot."""
     with _state_lock:
         return _state
 
 
 @app.route("/")
 def index():
+    """Serve the built React app."""
     return render_template("index.html", refresh_seconds=REFRESH_SECONDS)
 
 
 @app.route("/api/state")
 def api_state():
-    """Current snapshot as JSON. Handy for debugging, or for a second screen."""
+    """Return the current snapshot as JSON."""
     return jsonify(_current_state())
 
 
 @app.route("/api/probe/toggle", methods=["POST"])
 def api_probe_toggle():
-    """Turn the dashboard's own latency probe on or off."""
+    """Flip the latency probe on or off.
+
+    Returns:
+        The new state, or 409 if the probe is locked.
+    """
     global _probe_enabled
     if _probe_locked:
         return jsonify({"probe_enabled": _probe_enabled, "locked": True}), 409
@@ -99,16 +98,14 @@ def api_probe_toggle():
     return jsonify({"probe_enabled": _probe_enabled})
 
 
-# A bare file name ending in .png -- nothing else is servable from results/.
 _CHART_NAME = re.compile(r"^[A-Za-z0-9_\-]+\.png$")
 
 
 @app.route("/api/results/<path:name>")
 def api_result_chart(name):
-    """Module D's report charts (results/*.png), for the Experiment page.
+    """Serve one of Module D's chart PNGs.
 
-    Deliberately narrow: only a bare *.png name, only from the results
-    folder. The dashboard stays read-only and exposes no other files.
+    Only bare *.png names from the results folder; anything else is a 404.
     """
     if not _CHART_NAME.match(name):
         abort(404)
@@ -117,13 +114,7 @@ def api_result_chart(name):
 
 @app.route("/stream")
 def stream():
-    """
-    Server-sent events: push a snapshot to the browser as each one is taken.
-
-    SSE rather than polling so the page updates the moment a scaling action
-    lands -- which matters when demonstrating that CASPER scaled *before* the
-    traffic arrived.
-    """
+    """Push each new snapshot to the browser as a server-sent event."""
 
     def event_stream():
         last_sent = None
@@ -140,7 +131,7 @@ def stream():
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # in case this ever sits behind a proxy
+            "X-Accel-Buffering": "no",  # disable proxy buffering
         },
     )
 
@@ -149,5 +140,5 @@ if __name__ == "__main__":
     threading.Thread(target=_collect_loop, daemon=True).start()
     print("CASPER dashboard -> http://localhost:{}".format(PORT))
     print("Watching: {}".format(collector.MODULE_C_DIR))
-    # use_reloader=False: the reloader would start a second collector thread.
+    # The reloader would start a second collector thread.
     app.run(host="127.0.0.1", port=PORT, threaded=True, use_reloader=False)

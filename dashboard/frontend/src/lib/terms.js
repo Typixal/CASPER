@@ -1,9 +1,5 @@
-// One vocabulary, two registers.
-//
-// The dashboard speaks plainly by default -- a projector audience does not
-// know what a "replica" or a "p95" is. The sidebar's "show technical terms"
-// switch flips every label to the engineering word, for evaluators who ask.
-// Keeping both in one table means the two modes can never drift apart.
+// Every label in plain and technical form, in one table so the two modes
+// cannot drift apart.
 
 const TERMS = {
   replicas: ["servers", "replicas"],
@@ -26,6 +22,13 @@ const TERMS = {
   prediction: ["forecast", "Prediction"],
 }
 
+/**
+ * Label for a term in the current mode.
+ * @param {string} key A TERMS key.
+ * @param {boolean} [technical=false]
+ * @returns {string}
+ * @throws {Error} On an unknown key.
+ */
 export function term(key, technical = false) {
   const entry = TERMS[key]
   if (!entry) {
@@ -34,7 +37,9 @@ export function term(key, technical = false) {
   return technical ? entry[1] : entry[0]
 }
 
-// Every term as {key, plain, technical} -- the How it works page's glossary.
+/**
+ * @returns {{key: string, plain: string, technical: string}[]} All terms, for the glossary.
+ */
 export function glossary() {
   return Object.entries(TERMS).map(([key, [plain, technical]]) => ({ key, plain, technical }))
 }

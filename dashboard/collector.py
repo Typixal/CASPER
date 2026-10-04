@@ -1,20 +1,12 @@
-"""
-CASPER dashboard -- state collector.
+"""Build dashboard snapshots from the artifacts the system already writes.
 
-Reads the live state of the demo from the artifacts the system already
-produces. It is strictly READ-ONLY: nothing in this file scales anything,
-writes to nginx, or touches the audit log. The dashboard observes the demo,
-it never drives it.
-
-Sources it reads:
-    docker compose ps        -> which portal replicas exist and their health
-    nginx/nginx.conf         -> which replicas nginx is actually routing to
-    logs/scale_actions.jsonl -> the audit trail (who scaled, when, why)
-    policy/*.json            -> the Prediction currently driving the policy
-    http://localhost:8080    -> a light liveness probe for latency (optional)
-
-Module A / B / D artifacts are looked for too, and simply reported as
-"not built yet" when absent.
+Read-only. Sources:
+    docker compose ps          replicas and their health
+    nginx/nginx.conf           replicas nginx routes to
+    logs/scale_actions.jsonl   audit trail
+    policy/*.json              the active Prediction
+    Module A/B/D outputs       events, forecasts, experiment results
+    http://localhost:8080      optional one-request latency probe
 """
 
 import json
@@ -27,9 +19,6 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Where things live. Repo root is the parent of this dashboard folder.
-# ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MODULE_C_DIR = REPO_ROOT / "casper-module-c"
@@ -38,8 +27,6 @@ SCALE_LOG = MODULE_C_DIR / "logs" / "scale_actions.jsonl"
 SAMPLE_PREDICTION = MODULE_C_DIR / "policy" / "sample_prediction.json"
 DEMO_PREDICTION = MODULE_C_DIR / "policy" / "demo_prediction.json"
 
-# Not built yet -- these are the paths from Section 10 of the architecture doc.
-# The dashboard lights these panels up automatically if the files ever appear.
 MODULE_A_EVENTS = REPO_ROOT / "module-a-ingestion" / "events.json"
 MODULE_B_PREDICTIONS_DIR = REPO_ROOT / "module-b-estimation" / "predictions"
 MODULE_D_RESULTS_DIR = REPO_ROOT / "module-d-evaluation" / "results"
@@ -47,24 +34,25 @@ MODULE_D_K6_DIR = REPO_ROOT / "module-d-evaluation" / "k6"
 
 PORTAL_ENTRYPOINT = "http://localhost:8080"
 
-# How many audit-log lines and probe samples to keep on screen.
+# Audit-log lines and probe samples kept on screen.
 MAX_ACTIONS = 25
 PROBE_HISTORY = 90
 
 BEGIN_MARKER = "# --- BEGIN AUTO-GENERATED SERVERS ---"
 END_MARKER = "# --- END AUTO-GENERATED SERVERS ---"
-# The placeholder the controller writes when the stack is drained to zero.
+# What the controller writes when the stack is drained to zero.
 DRAINED_PLACEHOLDER = "127.0.0.1:1"
 
 # Rolling probe history, shared across collections.
 _probe_history = deque(maxlen=PROBE_HISTORY)
 
 
-# ---------------------------------------------------------------------------
-# Docker
-# ---------------------------------------------------------------------------
 def _run(cmd, cwd, timeout=15):
-    """Run a command and return (ok, stdout, stderr). Never raises."""
+    """Run a command without raising.
+
+    Returns:
+        (ok, stdout, stderr).
+    """
     try:
         proc = subprocess.run(
             cmd,
@@ -83,12 +71,7 @@ def _run(cmd, cwd, timeout=15):
 
 
 def _parse_ps_json(raw):
-    """
-    Parse `docker compose ps --format json`.
-
-    Compose prints either one JSON object per line or a single JSON array
-    depending on version, so handle both.
-    """
+    """Parse `docker compose ps --format json` (array or one object per line)."""
     raw = raw.strip()
     if not raw:
         return []
@@ -110,7 +93,12 @@ def _parse_ps_json(raw):
 
 
 def read_docker_state():
-    """Ask Docker what is running right now."""
+    """Read portal replicas and nginx status from Docker.
+
+    Returns:
+        Dict with available, error, replicas (name, id, state, health, ready)
+        and nginx_running.
+    """
     state = {
         "available": False,
         "error": None,
@@ -127,7 +115,7 @@ def read_docker_state():
         cwd=MODULE_C_DIR,
     )
     if not ok:
-        # Most common cause by far: Docker Desktop is not running.
+        # Usually Docker Desktop is not running.
         state["error"] = (err or "docker compose ps failed").strip().splitlines()[-1]
         return state
 
@@ -148,13 +136,10 @@ def read_docker_state():
             {
                 "name": name,
                 "short_name": name.split("-")[-1] if name else "?",
-                # The portal reports HOSTNAME (= the container's short ID) in
-                # its responses, so keep the ID here to match probe replies
-                # back to the container that served them.
+                # Matches the portal's served_by (its HOSTNAME = short ID).
                 "id": str(row.get("ID", ""))[:12],
                 "state": status,
-                # An image with no healthcheck reports "" -- show that as
-                # "no healthcheck" rather than pretending it is healthy.
+                # "" means no healthcheck; say so instead of implying healthy.
                 "health": health or ("no healthcheck" if status == "running" else ""),
                 "ready": status == "running" and health in ("healthy", "", "none"),
             }
@@ -164,11 +149,12 @@ def read_docker_state():
     return state
 
 
-# ---------------------------------------------------------------------------
-# nginx
-# ---------------------------------------------------------------------------
 def read_nginx_upstream():
-    """Read which replicas nginx is currently configured to route to."""
+    """Read the upstream servers from the generated nginx.conf.
+
+    Returns:
+        Dict with exists, servers ("name:port"), drained, modified and error.
+    """
     info = {
         "exists": NGINX_CONF.exists(),
         "servers": [],
@@ -211,11 +197,13 @@ def read_nginx_upstream():
     return info
 
 
-# ---------------------------------------------------------------------------
-# Audit log
-# ---------------------------------------------------------------------------
 def read_scale_actions():
-    """Read the tail of the audit log plus a per-source tally."""
+    """Read the audit log.
+
+    Returns:
+        Dict with the newest MAX_ACTIONS actions (newest first), total,
+        by_source counts, last action and error.
+    """
     info = {
         "exists": SCALE_LOG.exists(),
         "actions": [],
@@ -248,22 +236,19 @@ def read_scale_actions():
         source = entry.get("source", "unknown")
         info["by_source"][source] = info["by_source"].get(source, 0) + 1
 
-    info["actions"] = entries[-MAX_ACTIONS:][::-1]  # newest first
+    info["actions"] = entries[-MAX_ACTIONS:][::-1]
     if entries:
         info["last"] = entries[-1]
     return info
 
 
-# ---------------------------------------------------------------------------
-# Prediction (Module B's contract, consumed by Module C's policy)
-# ---------------------------------------------------------------------------
 def _pick_prediction_file():
-    """
-    Choose which Prediction the policy is most likely running against.
+    """Pick the Prediction the policy is most likely running.
 
-    demo_prediction.json is the time-shifted copy made for a live demo, so if
-    it exists and is newer it wins; otherwise fall back to the hand-authored
-    sample fixture.
+    The demo copy wins when it is at least as new as the sample fixture.
+
+    Returns:
+        (path, kind) or (None, None).
     """
     if DEMO_PREDICTION.exists():
         if not SAMPLE_PREDICTION.exists():
@@ -276,7 +261,12 @@ def _pick_prediction_file():
 
 
 def read_prediction():
-    """Read the active Prediction and work out where we are in its window."""
+    """Read the active Prediction and locate now within its window.
+
+    Returns:
+        Dict with the prediction fields plus phase (before | ramp | peak |
+        after), progress_pct, seconds_to_next and next_action.
+    """
     info = {
         "exists": False,
         "file": None,
@@ -341,18 +331,14 @@ def read_prediction():
     return info
 
 
-# ---------------------------------------------------------------------------
-# Liveness probe (optional)
-# ---------------------------------------------------------------------------
 def probe_portal(enabled=True):
-    """
-    Send ONE request to the nginx entry point to measure live latency and see
-    which replica answers.
+    """Send one request through nginx and record latency and the serving replica.
 
-    This is the dashboard's own traffic -- one request per refresh, clearly
-    labelled as such in the UI so it is never confused with k6's measurements.
-    Can be switched off from the UI before a Module D load test, so it does not
-    add noise to the numbers being reported.
+    Args:
+        enabled: When False, return an empty sample without sending anything.
+
+    Returns:
+        The sample dict; also appended to the rolling history.
     """
     sample = {
         "enabled": enabled,
@@ -381,8 +367,7 @@ def probe_portal(enabled=True):
             except json.JSONDecodeError:
                 pass
     except urllib.error.HTTPError as exc:
-        # 502 here is meaningful, not a crash: it is what a fully drained
-        # stack looks like from outside.
+        # 502 is expected when the stack is drained.
         sample["status"] = exc.code
         sample["error"] = "HTTP {}".format(exc.code)
     except (urllib.error.URLError, OSError) as exc:
@@ -401,7 +386,12 @@ def probe_portal(enabled=True):
 
 
 def probe_summary():
-    """Latency history and a per-replica hit count from the probe."""
+    """Summarise the probe history.
+
+    Returns:
+        Dict with history, samples, per_replica hit counts, avg_ms, max_ms
+        and error_count.
+    """
     history = list(_probe_history)
     latencies = [h["latency_ms"] for h in history if h["ok"] and h["latency_ms"]]
     per_replica = {}
@@ -420,19 +410,15 @@ def probe_summary():
     return summary
 
 
-# ---------------------------------------------------------------------------
-# Modules A / B / D -- present or "not built yet"
-# ---------------------------------------------------------------------------
 def read_other_modules():
-    """
-    Report what exists of the other three modules.
+    """Report what Modules A, B and D have produced so far.
 
-    Nothing is faked here. A module that has not been built reports
-    built=False and the dashboard greys its panel out.
+    Returns:
+        {"a": ..., "b": ..., "d": ...}, each with built, path and detail;
+        a missing module reports built=False.
     """
     modules = {}
 
-    # --- Module A: event dataset ---
     a = {"built": MODULE_A_EVENTS.exists(), "path": str(MODULE_A_EVENTS), "detail": None}
     if a["built"]:
         try:
@@ -452,7 +438,6 @@ def read_other_modules():
             a["detail"] = "unreadable: {}".format(exc)
     modules["a"] = a
 
-    # --- Module B: generated predictions ---
     b = {"built": False, "path": str(MODULE_B_PREDICTIONS_DIR), "detail": None}
     if MODULE_B_PREDICTIONS_DIR.is_dir():
         files = sorted(MODULE_B_PREDICTIONS_DIR.glob("*.json"))
@@ -461,7 +446,6 @@ def read_other_modules():
         b["files"] = [f.name for f in files[:5]]
     modules["b"] = b
 
-    # --- Module D: k6 scripts and results ---
     d = {"built": False, "path": str(MODULE_D_RESULTS_DIR), "detail": None}
     k6_scripts = sorted(MODULE_D_K6_DIR.glob("*.js")) if MODULE_D_K6_DIR.is_dir() else []
     results = (
@@ -481,12 +465,13 @@ def read_other_modules():
 
 
 def read_comparison():
-    """Headline numbers from Module D's results/comparison.json, or None.
+    """Read headline numbers from Module D's comparison.json.
 
-    Only what the panel shows -- the full file also carries per-interval time
-    series, which would bloat every SSE push for no visible benefit. A
-    missing or half-written file (mid-run) returns None rather than breaking
-    the whole snapshot.
+    Omits the time series to keep each SSE push small.
+
+    Returns:
+        Per-strategy p95/error/success/replica-seconds plus verdict and
+        p95_reduction_pct, or None if the file is missing or half-written.
     """
     path = MODULE_D_RESULTS_DIR / "comparison.json"
     try:
@@ -507,11 +492,15 @@ def read_comparison():
         return None
 
 
-# ---------------------------------------------------------------------------
-# One full snapshot
-# ---------------------------------------------------------------------------
 def collect(probe_enabled=True):
-    """Gather one complete snapshot of the demo for the dashboard."""
+    """Build one complete dashboard snapshot.
+
+    Args:
+        probe_enabled: Whether to send the latency probe request.
+
+    Returns:
+        The snapshot dict pushed to the browser.
+    """
     docker_state = read_docker_state()
     nginx = read_nginx_upstream()
     actions = read_scale_actions()
@@ -519,9 +508,7 @@ def collect(probe_enabled=True):
     prediction = read_prediction()
 
     ready = [r for r in docker_state["replicas"] if r["ready"]]
-    # A replica Docker says is healthy but nginx is not routing to means the
-    # controller has not run since it appeared -- worth showing, since it is
-    # exactly the drift the controller exists to prevent.
+    # Healthy but not routed = the controller has not run since it appeared.
     routed = set(s.split(":")[0] for s in nginx["servers"])
     for replica in docker_state["replicas"]:
         replica["routed"] = replica["name"] in routed
@@ -555,19 +542,17 @@ def collect(probe_enabled=True):
     }
 
 
-# ---------------------------------------------------------------------------
-# Event schedule (Module A events joined with Module B forecasts)
-# ---------------------------------------------------------------------------
 def read_schedule(now=None, demo_event_id=None):
-    """Every event in Module A's dataset, in date order, with B's forecast.
+    """Join Module A's events with Module B's forecasts, in date order.
 
-    Each row: event_id, board, event_type, date, registered_candidates,
-    predicted_peak_replicas / ramp_start / ramp_end (None when Module B has no
-    forecast for it), status ("past" | "upcoming" relative to `now`), and
-    demo (True for the event the live demo is replaying, time-shifted).
+    Args:
+        now: Reference time for past/upcoming. Defaults to the current time.
+        demo_event_id: Event the live demo is replaying, flagged demo=True.
 
-    The dataset's dates are real calendar dates, so with today's clock most
-    are in the past -- shown honestly as "past" rather than re-dated.
+    Returns:
+        Rows with event_id, board, event_type, date, registered_candidates,
+        predicted_peak_replicas, ramp_start, ramp_end (None without a
+        forecast), status ("past" | "upcoming") and demo.
     """
     now = now or datetime.now(timezone.utc)
     try:
@@ -581,7 +566,7 @@ def read_schedule(now=None, demo_event_id=None):
         try:
             date = datetime.fromisoformat(e["date"])
         except (KeyError, TypeError, ValueError):
-            continue  # Module A's loader rejects these; never crash the page
+            continue  # invalid date: skip rather than break the page
 
         forecast = {}
         path = MODULE_B_PREDICTIONS_DIR / "{}.json".format(e.get("event_id"))

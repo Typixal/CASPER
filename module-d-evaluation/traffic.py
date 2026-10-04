@@ -1,38 +1,33 @@
-"""Module D -- the exam-result-day traffic curve.
+"""Exam-result-day traffic curve shared by both comparison runs.
 
-Both runs (reactive and predictive) replay exactly this curve, so the only
-thing that differs between them is which brain is turning the scaling knob.
-
-Shape, as documented for the project: quiet -> sharp ramp -> sustained peak
--> decay. It is compressed into a few minutes so the experiment fits a demo,
-and sized for a laptop: the peak needs ~4 replicas, not the 12-20 the full
-Module B estimates call for.
+quiet -> sharp ramp -> sustained peak -> decay, compressed to a few minutes
+and sized for a laptop (~4 replicas at the default peak).
 """
 
 import json
 import math
 from pathlib import Path
 
-# Segment lengths, in seconds.
-QUIET_S = 45   # candidates idling before publication
-RAMP_S = 20    # result goes live: a sharp climb
-PEAK_S = 90    # sustained peak
-DECAY_S = 45   # tailing off
+QUIET_S = 45
+RAMP_S = 20
+PEAK_S = 90
+DECAY_S = 45
 
 RAMP_START_S = QUIET_S
 TOTAL_S = QUIET_S + RAMP_S + PEAK_S + DECAY_S
 
-QUIET_FRACTION = 0.05  # quiet-period load, as a share of peak
-DECAY_FRACTION = 0.10  # where the decay ends, as a share of peak
+QUIET_FRACTION = 0.05  # quiet load as a share of peak
+DECAY_FRACTION = 0.10  # load at the end of the decay as a share of peak
 
 
 def k6_config(peak_rps):
-    """The curve as k6 ramping-arrival-rate settings: startRate + stages.
+    """Build k6 ramping-arrival-rate settings for the curve.
 
-    Arrival rate is the right executor for this experiment: it keeps sending
-    requests at the scheduled rate whether or not the portal keeps up -- like
-    real candidates hitting refresh -- so under-provisioning shows up as
-    latency and errors, rather than as a load generator politely slowing down.
+    Args:
+        peak_rps: Requests per second at the peak.
+
+    Returns:
+        Dict with startRate and stages, as read by k6/exam_day_traffic.js.
     """
     quiet = max(1, round(peak_rps * QUIET_FRACTION))
     tail = max(1, round(peak_rps * DECAY_FRACTION))
@@ -48,7 +43,15 @@ def k6_config(peak_rps):
 
 
 def write_k6_config(path, peak_rps):
-    """Write the curve to `path` for the k6 script to read. Returns the path."""
+    """Write k6_config() as JSON.
+
+    Args:
+        path: Output file; parent folders are created.
+        peak_rps: Requests per second at the peak.
+
+    Returns:
+        The path written.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(k6_config(peak_rps), indent=2), encoding="utf-8")
@@ -56,9 +59,13 @@ def write_k6_config(path, peak_rps):
 
 
 def replicas_needed(peak_rps, per_replica_rps):
-    """Replicas to serve `peak_rps`, by the same rule Module B uses.
+    """Replicas to serve peak_rps, rounded up (Module B's rule).
 
-    Demand divided by per-replica capacity, always rounded up: a fractional
-    replica cannot run, and rounding down is under-provisioning.
+    Args:
+        peak_rps: Demand in requests per second.
+        per_replica_rps: Capacity of one replica.
+
+    Returns:
+        At least 1.
     """
     return max(1, math.ceil(peak_rps / per_replica_rps))

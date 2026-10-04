@@ -1,19 +1,16 @@
-// CASPER Module D -- exam-result-day traffic.
-//
-// Replays the curve from traffic.py (quiet -> sharp ramp -> sustained peak ->
-// decay) against nginx. Both comparison runs use this script with the same
-// stages file, so the only difference between them is the scaling strategy.
-//
-// Run by run_comparison.py; by hand:
-//   tools\k6.exe run -e STAGES_FILE=results/raw/stages.json -e STRATEGY=manual k6/exam_day_traffic.js
-//
-// Inputs (all via -e):
-//   STAGES_FILE   JSON written by traffic.write_k6_config()   (required).
-//                 Pass an ABSOLUTE path: k6's open() resolves relative paths
-//                 against this script's folder, not the working directory.
-//   TARGET_URL    defaults to the nginx entrypoint; never a portal container
-//   STRATEGY      tag recorded on every request (reactive | predictive)
-//   SUMMARY_FILE  where the end-of-run summary JSON is written
+/**
+ * Exam-result-day traffic against nginx, replaying the curve from traffic.py.
+ *
+ * Usually run by run_comparison.py. By hand:
+ *   tools\k6.exe run -e STAGES_FILE=<abs path>/stages.json -e STRATEGY=manual k6/exam_day_traffic.js
+ *
+ * Environment (-e):
+ *   STAGES_FILE   required; absolute path, since k6's open() resolves relative
+ *                 paths against this script's folder
+ *   TARGET_URL    default: the nginx entrypoint
+ *   STRATEGY      tag on every request (reactive | predictive)
+ *   SUMMARY_FILE  where the end-of-run summary JSON is written
+ */
 
 import http from "k6/http";
 
@@ -25,10 +22,8 @@ export const options = {
   discardResponseBodies: true,
   scenarios: {
     exam_day: {
-      // Arrival rate, not a fixed pool of users: requests keep coming at the
-      // scheduled rate whether or not the portal keeps up -- like candidates
-      // hammering refresh. Under-provisioning therefore shows up as latency
-      // and errors instead of the load generator quietly backing off.
+      // Arrival rate, not a user pool: requests keep coming whether or not the
+      // portal keeps up, so under-provisioning shows as latency and errors.
       executor: "ramping-arrival-rate",
       startRate: curve.startRate,
       timeUnit: "1s",
@@ -43,9 +38,12 @@ export default function () {
   http.get(TARGET_URL, { timeout: "10s", tags: { strategy: STRATEGY } });
 }
 
-// Write the end-of-run summary where run_comparison.py expects it. No remote
-// jslib import for the text summary: the run must not depend on fetching
-// anything from the internet.
+/**
+ * Write the summary JSON for run_comparison.py and a one-line result to stdout.
+ * Built by hand rather than with the remote jslib, so runs need no internet.
+ * @param {object} data k6 end-of-test data.
+ * @returns {object} Map of output target to content.
+ */
 export function handleSummary(data) {
   const out = {};
   out[__ENV.SUMMARY_FILE || "summary.json"] = JSON.stringify(data, null, 2);

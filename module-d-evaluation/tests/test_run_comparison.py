@@ -1,10 +1,7 @@
 """Tests for the comparison orchestrator's sequencing.
 
-The real environment drives Docker, k6 and two scaling processes. Here a
-recording environment stands in for those side effects -- it is not a mock of
-the code under test, it is the boundary the orchestrator is designed to be
-handed. k6 output it "produces" is the REAL k6 fixture, so the comparison
-pipeline downstream runs on genuine data.
+RecordingEnv stands in for Docker, k6 and the scaler processes; its k6
+output is the real k6 fixture, so the downstream pipeline runs on real data.
 """
 
 import json
@@ -70,8 +67,7 @@ def test_the_reactive_run_happens_first_then_the_predictive_run(tmp_path):
 
 
 def test_every_run_starts_from_the_same_baseline(tmp_path):
-    # Same starting capacity for both strategies is part of the experimental
-    # control -- otherwise the second run inherits the first run's replicas.
+    # Otherwise the second run inherits the first run's replicas.
     env = RecordingEnv()
     plan = rc.make_plan(baseline_replicas=1)
 
@@ -124,15 +120,12 @@ def test_the_prediction_asks_for_enough_replicas_for_the_peak(tmp_path):
 
 
 def test_the_reactive_ceiling_stays_at_six_for_the_default_load():
-    # 250 req/s needs 4 replicas; the reactive scaler keeps its usual
-    # ceiling of 6, so the committed results stay reproducible.
+    # Keeps the committed 250 req/s results reproducible.
     assert rc.make_plan(peak_rps=250).reactive_max == 6
 
 
 def test_the_reactive_ceiling_rises_to_match_casper_under_heavier_load():
-    # 500 req/s needs 8 replicas. Capping reactive at 6 while CASPER gets 8
-    # would make reactive lose because of its ceiling, not because it reacts
-    # late -- the experiment would prove nothing.
+    # Capping reactive at 6 while CASPER gets 8 would make it lose to its cap.
     plan = rc.make_plan(peak_rps=500, per_replica_rps=4000 / 60)
 
     assert plan.predictive_peak == 8
@@ -163,8 +156,7 @@ def test_dry_run_states_both_ceilings():
 
 
 def test_a_strategy_is_stopped_even_when_k6_fails(tmp_path):
-    # Cleanup is not optional: a crashed k6 must not leave a scaling process
-    # running in the background, quietly resizing the stack.
+    # A crashed k6 must not leave a scaler resizing the stack.
     env = RecordingEnv(k6_fails_for="reactive")
 
     with pytest.raises(RuntimeError):
@@ -188,14 +180,10 @@ def test_dry_run_describes_the_plan_without_touching_anything():
 
 
 def test_the_window_is_not_held_open_by_default():
-    # run-demo.ps1 runs a --dry-run inline in ITS OWN console before
-    # launching the real run. Holding there would block the launcher on an
-    # "Press Enter" prompt nobody asked for.
+    # The launcher's inline --dry-run must not block on "Press Enter".
     assert rc.should_hold_window(["--dry-run"]) is False
     assert rc.should_hold_window([]) is False
 
 
 def test_the_window_is_held_open_only_when_asked():
-    # The launcher passes --hold to the real run it starts in a new window,
-    # so the result (or the error) stays on screen.
     assert rc.should_hold_window(["--hold"]) is True

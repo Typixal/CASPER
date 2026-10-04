@@ -1,6 +1,15 @@
 import { WifiOff } from "lucide-react"
 import { PAGES } from "../lib/pages"
 
+/**
+ * Page navigation, the technical-terms switch and the live/disconnected status.
+ * @param {object} props
+ * @param {string} props.page Current page id.
+ * @param {(id: string) => void} props.onNavigate
+ * @param {boolean} props.technical
+ * @param {() => void} props.onToggleTechnical
+ * @param {boolean} props.connected Whether the SSE stream is live.
+ */
 export default function Sidebar({ page, onNavigate, technical, onToggleTechnical, connected }) {
   return (
     <aside className="flex shrink-0 flex-col border-border bg-navy/90 backdrop-blur-md lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-r border-b lg:border-b-0">

@@ -14,9 +14,8 @@ function Explain({ children }) {
 }
 
 /**
- * The dashboard's own test visitor. Locked off for the whole of Module D's
- * experiment, so no click can add the dashboard's traffic to what is being
- * measured; the backend refuses the toggle then too (HTTP 409).
+ * Probe on/off button. Disabled while locked during Module D's experiment
+ * (the backend also refuses with 409).
  */
 function ProbeButton({ probe, technical, onToggle, pending }) {
   const name = technical ? "probe" : "test visitor"
@@ -44,6 +43,14 @@ function ProbeButton({ probe, technical, onToggle, pending }) {
   )
 }
 
+/**
+ * Live system: stats, servers, prediction, latency and scaling history.
+ * @param {object} props
+ * @param {object} props.state Latest snapshot.
+ * @param {boolean} [props.technical=false]
+ * @param {() => void} props.onToggleProbe
+ * @param {boolean} [props.probePending=false]
+ */
 export default function LivePage({ state, technical = false, onToggleProbe, probePending = false }) {
   const t = (plain, tech) => (technical ? tech : plain)
   const probeEnabled = state.probe?.enabled ?? true

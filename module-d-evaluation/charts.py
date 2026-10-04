@@ -1,14 +1,10 @@
-"""Module D -- comparison charts for the Phase I report.
-
-Colours follow the project's architecture diagram: steel for CASPER's
-predictive strategy, amber for the reactive baseline.
-"""
+"""Comparison charts for the report (steel = CASPER, amber = reactive)."""
 
 from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")  # file output only; no display needed
+matplotlib.use("Agg")  # headless: files only
 import matplotlib.pyplot as plt  # noqa: E402
 
 STEEL = "#4A6FA5"
@@ -19,7 +15,7 @@ LABELS = {"predictive": "Predictive (CASPER)", "reactive": "Reactive baseline"}
 
 
 def _replica_steps(events, initial, end_s):
-    """(x, y) for a step plot of replica count over the run."""
+    """Build (xs, ys) for a step plot of replica count over the run."""
     xs, ys = [0.0], [initial]
     for event in sorted(events, key=lambda e: e["t"]):
         xs.append(event["t"])
@@ -30,6 +26,7 @@ def _replica_steps(events, initial, end_s):
 
 
 def _latency_over_time(comparison, path, ramp_start_s, initial_replicas):
+    """Plot p95 over time above the replica count, for both strategies."""
     fig, (top, bottom) = plt.subplots(
         2, 1, figsize=(10, 6.5), sharex=True, gridspec_kw={"height_ratios": [3, 2]}
     )
@@ -67,6 +64,7 @@ def _latency_over_time(comparison, path, ramp_start_s, initial_replicas):
 
 
 def _summary_bars(comparison, path):
+    """Plot p95, error rate and success rate side by side."""
     names = ("reactive", "predictive")
     panels = [
         ("p95 response time (ms)", lambda r: r["summary"]["p95_ms"]),
@@ -90,7 +88,17 @@ def _summary_bars(comparison, path):
 
 
 def render(comparison, out_dir, ramp_start_s, initial_replicas):
-    """Write latency_over_time.png and summary_bars.png; return their paths."""
+    """Write latency_over_time.png and summary_bars.png.
+
+    Args:
+        comparison: Output of compare.build_comparison().
+        out_dir: Folder to write into; created if missing.
+        ramp_start_s: Where to mark the traffic ramp, in seconds.
+        initial_replicas: Replicas at t=0 for the step plot.
+
+    Returns:
+        The two PNG paths.
+    """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 

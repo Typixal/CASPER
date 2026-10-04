@@ -1,6 +1,4 @@
-"""Tests for the event schedule: Module A's events joined with Module B's
-predictions, so a viewer sees what is coming, how big it is, and what CASPER
-will do about it."""
+"""Tests for the event schedule: Module A's events joined with Module B's forecasts."""
 
 import json
 from datetime import datetime, timezone
@@ -102,7 +100,7 @@ def test_no_dataset_means_an_empty_schedule_not_an_error(modules):
 
 def test_the_live_snapshot_includes_the_schedule_with_the_demo_event_flagged(modules, monkeypatch):
     write(*modules, [event("cbse_2026", "2026-05-13T10:00:00+05:30")])
-    # Keep the snapshot off Docker and the network -- only the join is under test.
+    # Keep the snapshot off Docker and the network.
     monkeypatch.setattr(collector, "read_docker_state", lambda: {
         "available": False, "error": "test", "replicas": [], "nginx_running": False})
     monkeypatch.setattr(collector, "read_prediction", lambda: {

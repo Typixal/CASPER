@@ -1,23 +1,14 @@
-"""
-CASPER shared scale controller (Module C).
+"""Shared scale controller: the one knob both scaling strategies turn.
 
-This is the single piece of real infrastructure logic in the project: the
-"knob" that changes how much capacity is running. Both scaling brains turn
-this same knob --
+Scales the portal with Docker Compose, rewrites nginx's upstream to the
+replicas that are actually healthy, reloads nginx, and appends every action to
+logs/scale_actions.jsonl tagged with its `source`.
 
-    * the predictive policy  (Module C, policy/predictive_policy.py)
-    * the reactive baseline  (Module D, imports scale_to from this file)
+Import-safe: nothing touches Docker at import time (Module D imports
+`scale_to` from here).
 
-Every scaling action is appended to logs/scale_actions.jsonl with a `source`
-tag, so afterwards we can tell exactly which strategy did what, and when.
-
-Direct smoke test (no policy, no prediction involved):
-
-    python controller/scale_controller.py 3
-
-IMPORTANT for Module D: importing this file must be side-effect free. Nothing
-below runs Docker at import time -- only inside functions and under the
-__main__ guard.
+Usage:
+    python controller/scale_controller.py <replica_count>
 """
 
 import json
@@ -28,46 +19,37 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Paths. Everything is resolved relative to the project root (the folder that
-# holds docker-compose.yml), so the script works no matter which directory the
-# team runs it from.
-# ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 NGINX_TEMPLATE = PROJECT_ROOT / "nginx" / "nginx.conf.template"
 NGINX_CONF = PROJECT_ROOT / "nginx" / "nginx.conf"
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_FILE = LOG_DIR / "scale_actions.jsonl"
 
-# Markers in nginx.conf.template. Everything between them is replaced with the
-# current healthy replica list.
+# The template block between these markers is replaced with the replica list.
 BEGIN_MARKER = "# --- BEGIN AUTO-GENERATED SERVERS ---"
 END_MARKER = "# --- END AUTO-GENERATED SERVERS ---"
 
-# nginx refuses to start with an empty upstream block, so a fully drained
-# stack (n == 0) is represented by a single server that is marked down.
+# nginx rejects an empty upstream, so a drained stack gets one dead server.
 EMPTY_UPSTREAM_LINE = "        server 127.0.0.1:1 down;"
 
-# The port the Flask portal listens on inside the container.
 PORTAL_PORT = 5000
 
-# After scaling up, containers need a moment to boot and pass their first
-# healthcheck. We poll Docker until the expected number are healthy, or until
-# this many seconds have passed (whichever comes first).
 HEALTH_POLL_TIMEOUT_SECONDS = 45
 HEALTH_POLL_INTERVAL_SECONDS = 2
 
 
-# ---------------------------------------------------------------------------
-# Docker helpers
-# ---------------------------------------------------------------------------
 def _compose(*args: str, capture: bool = False) -> subprocess.CompletedProcess:
-    """
-    Run a `docker compose ...` command from the project root.
+    """Run `docker compose <args>` from the project root.
 
-    Raises subprocess.CalledProcessError if the command fails, so a broken
-    Docker setup surfaces loudly instead of silently producing a wrong
-    nginx config.
+    Args:
+        *args: Arguments after `docker compose`.
+        capture: Capture stdout/stderr instead of streaming them.
+
+    Returns:
+        The completed process.
+
+    Raises:
+        subprocess.CalledProcessError: If the command exits non-zero.
     """
     cmd = ["docker", "compose", *args]
     return subprocess.run(
@@ -80,24 +62,27 @@ def _compose(*args: str, capture: bool = False) -> subprocess.CompletedProcess:
 
 
 def _parse_compose_ps(raw: str) -> list:
-    """
-    Parse the output of `docker compose ps --format json`.
+    """Parse `docker compose ps --format json` output.
 
-    Different Compose versions print either one JSON object per line or a
-    single JSON array, so handle both rather than betting on one.
+    Compose versions differ: some print a JSON array, others one object per
+    line. Both are accepted; non-JSON lines are skipped.
+
+    Args:
+        raw: The command's stdout.
+
+    Returns:
+        One dict per container.
     """
     raw = raw.strip()
     if not raw:
         return []
 
-    # Array form.
     if raw.startswith("["):
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
             return []
 
-    # Line-delimited form.
     containers = []
     for line in raw.splitlines():
         line = line.strip()
@@ -106,19 +91,18 @@ def _parse_compose_ps(raw: str) -> list:
         try:
             containers.append(json.loads(line))
         except json.JSONDecodeError:
-            # Ignore any non-JSON noise Compose may print.
             continue
     return containers
 
 
 def _healthy_replica_names() -> list:
-    """
-    Ask Docker which portal containers are actually usable right now.
+    """List portal containers that are safe to route to.
 
-    A replica counts as usable when it is running AND either reports healthy
-    or reports no health status at all (an image without a healthcheck).
-    A container that is still "starting" is deliberately excluded -- nginx
-    must never be told to route to a replica Docker has not confirmed.
+    A replica qualifies when it is running and healthy, or has no healthcheck.
+    "starting" is excluded: nginx must never route to an unconfirmed replica.
+
+    Returns:
+        Container names, sorted so nginx.conf diffs stay stable.
     """
     result = _compose("ps", "portal", "--format", "json", capture=True)
     containers = _parse_compose_ps(result.stdout)
@@ -132,18 +116,19 @@ def _healthy_replica_names() -> list:
             if name:
                 names.append(name)
 
-    # Sort for a stable, readable nginx.conf diff between runs.
     return sorted(names)
 
 
 def _wait_for_healthy(expected: int, settle_seconds: float) -> list:
-    """
-    Give containers time to come up, then poll until `expected` replicas are
-    healthy (or the timeout expires).
+    """Wait until `expected` replicas are healthy or the poll times out.
 
-    Returns whatever is genuinely healthy at the end -- which may be fewer
-    than expected if a container failed to start. That is the honest answer
-    and is exactly what nginx should be configured with.
+    Args:
+        expected: Replica count to wait for.
+        settle_seconds: Initial pause before the first health check.
+
+    Returns:
+        The replicas healthy at the end, possibly fewer than expected if a
+        container failed to start.
     """
     if expected <= 0:
         return _healthy_replica_names()
@@ -165,11 +150,18 @@ def _wait_for_healthy(expected: int, settle_seconds: float) -> list:
     return names
 
 
-# ---------------------------------------------------------------------------
-# nginx config generation
-# ---------------------------------------------------------------------------
 def _render_nginx_conf(replica_names: list) -> str:
-    """Build the nginx config text for the given replica list."""
+    """Render nginx.conf from the template for the given replicas.
+
+    Args:
+        replica_names: Container names to put in the upstream block.
+
+    Returns:
+        The full config text.
+
+    Raises:
+        RuntimeError: If the template does not contain exactly one marker block.
+    """
     template = NGINX_TEMPLATE.read_text(encoding="utf-8")
 
     if replica_names:
@@ -196,20 +188,17 @@ def _render_nginx_conf(replica_names: list) -> str:
 
 
 def _write_nginx_conf(replica_names: list) -> None:
-    """Write the generated config to nginx/nginx.conf."""
+    """Write the rendered config to nginx/nginx.conf."""
     NGINX_CONF.write_text(_render_nginx_conf(replica_names), encoding="utf-8")
 
 
-# ---------------------------------------------------------------------------
-# Audit log
-# ---------------------------------------------------------------------------
 def _log_action(requested: int, replica_names: list, source: str) -> None:
-    """
-    Append one JSON line describing what just happened.
+    """Append one scale action to the JSONL audit log Module D reads.
 
-    This file is the "executed action" half of Module C's required
-    predicted-event -> planned-action -> executed-action trail, and it is what
-    Module D reads to compare the two strategies.
+    Args:
+        requested: Replica count that was asked for.
+        replica_names: Replicas actually routed afterwards.
+        source: "predictive", "reactive" or "manual".
     """
     LOG_DIR.mkdir(exist_ok=True)
     entry = {
@@ -224,71 +213,55 @@ def _log_action(requested: int, replica_names: list, source: str) -> None:
         handle.write(json.dumps(entry) + "\n")
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 def scale_to(n: int, source: str = "manual", settle_seconds: float = 3.0) -> list:
-    """
-    Scale the portal to exactly n replicas, update nginx to match, log the action.
+    """Scale the portal to n replicas, point nginx at the healthy ones, log it.
 
     Args:
-        n: target replica count (0 means fully drained).
-        source: who asked for this -- "predictive", "reactive", or "manual".
-                Module D's comparison depends on this being set correctly.
-        settle_seconds: initial pause before checking health, giving Flask
-                time to boot.
+        n: Target replica count; 0 drains the stack.
+        source: Who asked: "predictive", "reactive" or "manual". Module D
+            separates the two strategies by this tag.
+        settle_seconds: Pause before the first health check.
 
     Returns:
-        The list of replica container names nginx was actually pointed at.
+        Container names nginx now routes to.
+
+    Raises:
+        ValueError: If n is negative.
+        subprocess.CalledProcessError: If a Compose command fails.
     """
     if n < 0:
         raise ValueError("Replica count cannot be negative.")
 
     print("[controller] scaling portal to {} replica(s) (source={})".format(n, source))
 
-    # 1. Ask Docker for the new replica count.
-    #    --no-deps + naming only `portal` keeps this call from touching nginx:
-    #    nginx must not be (re)started until step 4 has written a config that
-    #    matches the replicas that actually exist.
+    # --no-deps and naming only `portal`: nginx must not restart until its
+    # config matches the replicas that exist.
     _compose("up", "-d", "--no-deps", "--scale", "portal={}".format(n), "portal")
 
-    # 2 & 3. Wait, then re-derive the REAL healthy list from Docker.
-    #        Never trust the requested N blindly -- a container may have
-    #        failed to start, and nginx must not route to it.
+    # Route only to what Docker confirms, never to the requested n.
     replica_names = _wait_for_healthy(n, settle_seconds)
     print("[controller] healthy replicas: {}".format(replica_names or "(none)"))
 
-    # 4. Regenerate the nginx config to match reality.
     _write_nginx_conf(replica_names)
 
-    # 5. Make sure nginx exists before trying to exec into it. Harmless and
-    #    idempotent if it is already running; necessary on the very first
-    #    call against a fresh stack.
-    #
-    #    --no-deps is essential here, not cosmetic: without it Compose would
-    #    also bring up nginx's `depends_on` target (portal) at its DEFAULT
-    #    scale of 1, silently destroying the replicas we just created.
+    # Ensures nginx exists on a fresh stack. --no-deps is required: without it
+    # Compose also starts nginx's depends_on (portal) at scale 1, destroying
+    # the replicas just created.
     _compose("up", "-d", "--no-deps", "nginx")
 
-    # 6. Zero-downtime reload -- NOT a restart. In-flight requests finish on
-    #    the old config while new ones use the new one. This is what makes
-    #    scaling down a graceful drain rather than a kill.
+    # Reload, not restart: in-flight requests finish, so scale-down drains.
     _compose("exec", "-T", "nginx", "nginx", "-s", "reload")
 
-    # 7. Audit trail.
     _log_action(n, replica_names, source)
 
     return replica_names
 
 
 def current_replica_count() -> int:
-    """Return how many healthy replicas are live right now."""
+    """Return the number of healthy replicas right now."""
     return len(_healthy_replica_names())
 
 
-# ---------------------------------------------------------------------------
-# Manual smoke test:  python controller/scale_controller.py 3
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python controller/scale_controller.py <replica_count>")

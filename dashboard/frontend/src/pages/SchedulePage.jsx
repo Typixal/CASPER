@@ -28,6 +28,12 @@ function Forecast({ row, technical }) {
   )
 }
 
+/**
+ * Every Module A event with its Module B forecast and past/upcoming status.
+ * @param {object} props
+ * @param {object[]} props.schedule Output of collector.read_schedule().
+ * @param {boolean} [props.technical=false]
+ */
 export default function SchedulePage({ schedule, technical = false }) {
   return (
     <>

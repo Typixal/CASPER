@@ -2,10 +2,11 @@ import { motion } from "framer-motion"
 import { CircleDashed, CircleCheckBig } from "lucide-react"
 
 /**
- * Status card for Modules A / B / D. Dashed and dimmed until that module's
- * artifacts exist on disk, then it switches to a solid card with a green
- * accent -- so the panel lights up on its own the day a teammate lands
- * their module, with no dashboard change needed.
+ * Status card for Module A, B or D; dimmed until its artifacts exist.
+ * @param {object} props
+ * @param {string} props.title
+ * @param {object} props.module Entry from snapshot modules.
+ * @param {number} [props.delay=0] Entrance animation delay, seconds.
  */
 export default function ModulePanel({ title, module, delay = 0, children }) {
   const built = module?.built

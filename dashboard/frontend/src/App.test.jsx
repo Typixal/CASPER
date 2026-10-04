@@ -3,8 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
 
-// jsdom has no EventSource; the app's live connection is irrelevant to
-// navigation, so a silent stand-in is enough.
+// jsdom has no EventSource; navigation tests need only a silent stand-in.
 class SilentEventSource {
   close() {}
 }

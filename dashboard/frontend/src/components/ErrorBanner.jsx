@@ -2,10 +2,10 @@ import { AlertTriangle, Loader } from "lucide-react"
 import { motion } from "framer-motion"
 
 /**
- * One global banner for conditions that make the whole page unreliable:
- * startup, a fatal collector exception, or Docker being unreachable.
- * Narrower per-subsystem errors render inside their own panel instead, so
- * one broken source doesn't hide the panels that are fine.
+ * Page-wide banner for startup, a fatal collector error or Docker being down.
+ * Narrower errors render inside their own panel.
+ * @param {object} props
+ * @param {object} props.state Latest snapshot.
  */
 export default function ErrorBanner({ state }) {
   if (state.starting) {

@@ -5,9 +5,9 @@ import { sourceColor, sourceLabel } from "../../lib/format"
 const ORDER = ["predictive", "reactive", "manual"]
 
 /**
- * Who has been turning the knob. Once Module D's reactive baseline runs,
- * this is the at-a-glance answer to "which strategy caused what" -- the
- * comparison the whole project exists to make.
+ * Share of scale actions per source (predictive / reactive / manual).
+ * @param {object} props
+ * @param {object} props.scaleLog Snapshot scale_log.
  */
 export default function SourceSplitBar({ scaleLog }) {
   const total = scaleLog?.total ?? 0

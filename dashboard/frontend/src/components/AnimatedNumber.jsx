@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 
 /**
- * Counts from the previous value to the next one instead of snapping.
- *
- * Worth the few lines: on a projector, a replica count sliding 2 -> 3 is a
- * visible event at the back of the room, where a silent digit swap is not.
- * Falls back to rendering the raw value for anything non-numeric (the
- * collector legitimately sends "—" / null before the first snapshot).
+ * Number that counts from its previous value instead of snapping.
+ * Non-numeric values (e.g. null before the first snapshot) render as-is.
+ * @param {object} props
+ * @param {number|string|null} props.value
+ * @param {number} [props.duration=600] Animation length in ms.
+ * @param {string} [props.className]
  */
 export default function AnimatedNumber({ value, duration = 600, className = "" }) {
   const numeric = typeof value === "number" && Number.isFinite(value)
@@ -24,7 +24,7 @@ export default function AnimatedNumber({ value, duration = 600, className = "" }
     const start = performance.now()
     const tick = (now) => {
       const t = Math.min(1, (now - start) / duration)
-      // ease-out cubic: fast first, settles gently
+      // ease-out cubic
       const eased = 1 - Math.pow(1 - t, 3)
       setDisplay(Math.round(from + (to - from) * eased))
       if (t < 1) {

@@ -1,11 +1,6 @@
-// Copies the Vite build's HTML shell into Flask's templates/ folder.
-//
-// vite.config.js sets `base: '/static/dist/'`, so the asset <script>/<link>
-// tags Vite writes into static/dist/index.html already point at the right
-// Flask static URL -- this is a straight file copy, no path rewriting.
-//
-// Run automatically by `npm run build:flask` after every `vite build`, so
-// nobody has to hand-edit a hashed asset filename into templates/index.html.
+// Copy the built static/dist/index.html into Flask's templates/ folder.
+// Run by `npm run build:flask`. No path rewriting needed: vite's `base` is
+// already /static/dist/.
 
 import { copyFileSync, existsSync } from "node:fs"
 import { fileURLToPath } from "node:url"

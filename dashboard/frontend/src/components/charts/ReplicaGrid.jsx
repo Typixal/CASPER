@@ -22,6 +22,13 @@ function EmptyState({ icon: Icon, children }) {
   )
 }
 
+/**
+ * One card per portal replica: health, whether nginx routes to it, probe hits.
+ * @param {object} props
+ * @param {object} props.docker Snapshot docker state.
+ * @param {object} props.probeSummary Snapshot probe_summary.
+ * @param {boolean} [props.technical=false] Show container ids and nginx terms.
+ */
 export default function ReplicaGrid({ docker, probeSummary, technical = false }) {
   if (!docker?.available) {
     return <EmptyState icon={ServerOff}>Docker not reachable — is Docker Desktop running?</EmptyState>
@@ -40,8 +47,7 @@ export default function ReplicaGrid({ docker, probeSummary, technical = false })
         {replicas.map((r, i) => {
           const status = STATUS[classify(r)]
           const StatusIcon = status.icon
-          // The portal reports its container ID as served_by, so probe hits
-          // match back to a card by ID prefix.
+          // served_by is the container id; match probe hits by prefix.
           const hitKey = Object.keys(hits).find((k) => r.id && (r.id.startsWith(k) || k.startsWith(r.id)))
           const hitCount = hitKey ? hits[hitKey] : 0
 

@@ -16,7 +16,7 @@ describe("term", () => {
   })
 
   it("fails loudly on an unknown key instead of rendering a blank", () => {
-    // A typo in a key would otherwise show an empty label on the projector.
+    // Otherwise a typo shows as an empty label.
     expect(() => term("replcias")).toThrow(/unknown term/)
   })
 })

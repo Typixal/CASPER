@@ -29,6 +29,14 @@ function pageLoad(probe, technical) {
   return technical ? `${Math.round(probe.latency_ms)} ms` : `${(probe.latency_ms / 1000).toFixed(2)} s`
 }
 
+/**
+ * Landing page: one-sentence status, key numbers, countdown, next event and
+ * the experiment headline.
+ * @param {object} props
+ * @param {object} props.state Latest snapshot.
+ * @param {boolean} [props.technical=false]
+ * @param {(id: string) => void} props.onNavigate
+ */
 export default function OverviewPage({ state, technical = false, onNavigate }) {
   const now = describeNow(state, technical)
   const summary = state.summary ?? {}

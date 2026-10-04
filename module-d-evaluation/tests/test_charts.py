@@ -52,8 +52,7 @@ def test_render_writes_the_summary_bars_chart(tmp_path):
 
 
 def test_render_copes_with_empty_buckets(tmp_path):
-    # An interval with no requests has p95_ms None; the chart must skip it,
-    # not crash and not plot it as 0 ms.
+    # Empty intervals (p95_ms None) are skipped, not plotted as 0 ms.
     data = comparison()
     data["strategies"]["reactive"]["series"]["buckets"][2]["p95_ms"] = None
 

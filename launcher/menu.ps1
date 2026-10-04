@@ -1,18 +1,25 @@
-# The launcher's interactive menu: shown when run-demo.ps1 is started with no
-# arguments. It only asks questions and returns the answers; run-demo.ps1 then
-# runs exactly the same code the flags do.
-#
-# Every prompt goes through -Reader (default: Read-Host), so the menu can be
-# driven by scripted answers in menu.Tests.ps1. Keep this file pure ASCII --
-# Windows PowerShell 5.1 reads .ps1 files as ANSI.
+<#
+.SYNOPSIS
+    Interactive menu for run-demo.ps1 when it is run without arguments.
+
+.DESCRIPTION
+    Only asks and returns answers; run-demo.ps1 maps them onto its flags.
+    Prompts go through -Reader (default Read-Host) so tests can script them.
+    Keep this file ASCII: Windows PowerShell 5.1 reads .ps1 files as ANSI.
+#>
 
 $DefaultReader = { param($prompt) Read-Host $prompt }
 
-# Above this the laptop running k6, nginx and every container becomes the
-# bottleneck for both strategies alike, which muddies the comparison.
+# Above this the laptop itself becomes the bottleneck for both strategies.
 $LaptopRpsLimit = 400
 
 function Read-MenuChoice {
+    <#
+    .SYNOPSIS
+        Show numbered options and return the chosen 1-based index.
+    .DESCRIPTION
+        Enter returns -Default; invalid answers are asked again.
+    #>
     param([string]$Prompt, [string[]]$Options, [int]$Default = 1, [scriptblock]$Reader = $DefaultReader)
 
     Write-Host ""
@@ -32,6 +39,10 @@ function Read-MenuChoice {
 }
 
 function Read-MenuNumber {
+    <#
+    .SYNOPSIS
+        Ask for a whole number >= -Min; Enter returns -Default.
+    #>
     param([string]$Prompt, [int]$Default, [int]$Min = 0, [scriptblock]$Reader = $DefaultReader)
 
     while ($true) {
@@ -44,6 +55,10 @@ function Read-MenuNumber {
 }
 
 function Read-MenuYesNo {
+    <#
+    .SYNOPSIS
+        Ask a yes/no question; Enter means yes.
+    #>
     param([string]$Prompt, [scriptblock]$Reader = $DefaultReader)
 
     while ($true) {
@@ -55,6 +70,10 @@ function Read-MenuYesNo {
 }
 
 function Get-LoadWarning {
+    <#
+    .SYNOPSIS
+        Warning text for loads above $LaptopRpsLimit, else $null.
+    #>
     param([int]$PeakRps)
     if ($PeakRps -le $LaptopRpsLimit) { return $null }
     return "Above $LaptopRpsLimit req/s the laptop itself (k6, nginx, every container) " +
@@ -62,7 +81,10 @@ function Get-LoadWarning {
 }
 
 function Get-MenuEvents {
-    # Module A's events, as Id + a readable label, in dataset order.
+    <#
+    .SYNOPSIS
+        Module A's events as Id + Label objects, in dataset order.
+    #>
     param([string]$EventsPath)
     $raw = Get-Content $EventsPath -Raw | ConvertFrom-Json
     # Not $event: that is a PowerShell automatic variable.
@@ -78,11 +100,11 @@ function Get-MenuEvents {
 
 function Invoke-LauncherMenu {
     <#
-        Asks what to run and returns a hashtable:
-            Mode     Demo | Compare | Start | Stop
-            EventId  Peak      (Demo)
-            PeakRps            (Compare)
-            Go       $false if the user said no at the final confirmation
+    .SYNOPSIS
+        Ask what to run, confirm, and return the answers.
+    .OUTPUTS
+        Hashtable: Mode (Demo | Compare | Start | Stop), EventId and Peak
+        (Demo), PeakRps (Compare), Go ($false if declined at confirmation).
     #>
     param([object[]]$Events, [scriptblock]$Reader = $DefaultReader)
 

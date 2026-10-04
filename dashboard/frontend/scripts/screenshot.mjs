@@ -1,12 +1,10 @@
-// Screenshot every dashboard page, for checking the UI by eye.
+// Screenshot dashboard pages into ./screenshots/ for checking by eye.
 //
-//   npm run screenshot                  # all pages -> ./screenshots/
-//   npm run screenshot -- overview live # just these
+//   npm run screenshot                  # all pages
+//   npm run screenshot -- overview live # selected pages
 //
-// Needs the dashboard running (python app.py) and Chrome installed. Uses a
-// fixed viewport and NO full-page capture: a full-page capture resizes the
-// viewport, which makes recharts replay its draw animation and photograph
-// charts half-drawn.
+// Needs the dashboard running and Chrome installed. Fixed viewport, no
+// full-page capture: resizing replays recharts' animation mid-shot.
 import { mkdirSync } from "node:fs"
 import puppeteer from "puppeteer-core"
 

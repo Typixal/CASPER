@@ -1,11 +1,13 @@
-"""Module A -- civic event dataset loader."""
+"""Module A: load and validate the civic event dataset (frozen Event schema).
+
+Usage:
+    python loader.py
+"""
 
 import json
 from datetime import datetime
 from pathlib import Path
 
-# The dataset this module ships. Callers (Module B, the dashboard) can just
-# call load_events() and get it, without knowing where the file lives.
 DEFAULT_DATASET = Path(__file__).resolve().parent / "events.json"
 
 REQUIRED_FIELDS = (
@@ -19,17 +21,24 @@ REQUIRED_FIELDS = (
 
 
 class InvalidEventError(ValueError):
-    """Raised when an event does not match the frozen Event schema."""
+    """An event does not match the Event schema."""
 
 
 class EventNotFoundError(KeyError):
-    """Raised when a requested event_id is not present in the dataset."""
+    """A requested event_id is not in the dataset."""
 
 
 def load_events(path=None):
-    """Read an event dataset, validate it, and return its events.
+    """Read and validate an event dataset.
 
-    With no argument, reads the dataset this module ships.
+    Args:
+        path: JSON file to read. Defaults to the shipped events.json.
+
+    Returns:
+        The list of Event dicts.
+
+    Raises:
+        InvalidEventError: If an event breaks the schema or an id repeats.
     """
     events = json.loads(Path(path or DEFAULT_DATASET).read_text(encoding="utf-8"))
 
@@ -47,7 +56,18 @@ def load_events(path=None):
 
 
 def get_event(events, event_id):
-    """Return the event with `event_id`, or raise EventNotFoundError."""
+    """Find one event by id.
+
+    Args:
+        events: Loaded events.
+        event_id: Id to look up.
+
+    Returns:
+        The matching Event.
+
+    Raises:
+        EventNotFoundError: If no event has that id.
+    """
     for event in events:
         if event["event_id"] == event_id:
             return event
@@ -57,17 +77,25 @@ def get_event(events, event_id):
 
 
 def get_prior_events(events, event):
-    """Resolve an event's prior_similar_event_ids into the events themselves.
+    """Resolve an event's prior_similar_event_ids to the events themselves.
 
-    This is the "comparable past events" proxy signal Module B estimates
-    from. An empty list is a legitimate, meaningful answer -- it means a
-    first-time event with no history, which is exactly the case CASPER
-    exists to handle.
+    An empty result is valid: a first-time event with no history.
+
+    Args:
+        events: Loaded events.
+        event: The event whose priors to resolve.
+
+    Returns:
+        The prior Events, in reference order.
+
+    Raises:
+        EventNotFoundError: If a referenced prior is missing.
     """
     return [get_event(events, prior_id) for prior_id in event["prior_similar_event_ids"]]
 
 
 def _validate(event):
+    """Raise InvalidEventError unless `event` satisfies the Event schema."""
     event_id = event.get("event_id", "<no event_id>")
 
     for field in REQUIRED_FIELDS:
@@ -79,8 +107,7 @@ def _validate(event):
     _validate_date(event_id, event["date"])
 
     candidates = event["registered_candidates"]
-    # bool is a subclass of int in Python, so reject it explicitly rather than
-    # letting True sail through as the number 1.
+    # bool is an int subclass; reject True explicitly.
     if isinstance(candidates, bool) or not isinstance(candidates, int) or candidates <= 0:
         raise InvalidEventError(
             "event {!r} has registered_candidates {!r}; expected a positive integer".format(
@@ -90,11 +117,12 @@ def _validate(event):
 
 
 def _validate_date(event_id, raw_date):
-    """The schema requires ISO 8601 *with* a timezone offset.
+    """Require ISO 8601 with a timezone offset.
 
-    Module C schedules real scale-up actions against these instants, so a
-    naive timestamp is not merely untidy -- it is ambiguous about when
-    capacity should actually appear.
+    Module C schedules against these instants, so a naive time is ambiguous.
+
+    Raises:
+        InvalidEventError: If the date is unparseable or has no offset.
     """
     try:
         parsed = datetime.fromisoformat(raw_date)
@@ -112,7 +140,14 @@ def _validate_date(event_id, raw_date):
 
 
 def summarize(events):
-    """One human-readable line per event, for the loader's CLI output."""
+    """Format one line per event for the CLI.
+
+    Args:
+        events: Loaded events.
+
+    Returns:
+        A list of display lines.
+    """
     lines = []
     for event in events:
         priors = event["prior_similar_event_ids"]
@@ -129,8 +164,6 @@ def summarize(events):
 
 
 if __name__ == "__main__":
-    # Deliverable: run the loader directly to see what the dataset holds.
-    #     python loader.py
     loaded = load_events()
     print("Module A -- {} event(s) from {}".format(len(loaded), DEFAULT_DATASET.name))
     print()

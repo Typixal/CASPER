@@ -20,13 +20,10 @@ def test_percentile_ignores_input_order():
 
 
 def test_percentile_of_no_samples_is_an_error():
-    # An empty probe round means every request failed or none were sent --
-    # reporting 0 ms would tell the scaler everything is fast.
+    # Reporting 0 ms for no samples would tell the scaler everything is fast.
     with pytest.raises(ValueError):
         probe.percentile([], 95)
 
-
-# --- measure(): real HTTP against a real local server ------------------------
 
 import http.server  # noqa: E402
 import threading  # noqa: E402
@@ -77,9 +74,7 @@ def test_measure_reflects_how_slow_the_server_is(server):
 
 
 def test_a_503_counts_as_an_error_and_as_a_timeout_length_latency(server):
-    # An overloaded portal refusing requests is the strongest overload signal
-    # there is. Recording its (fast) refusal time would make overload look
-    # like great latency, so a failure is scored at the full timeout.
+    # A fast refusal recorded as-is would make overload look like low latency.
     handler, url = server
     handler.status = 503
 

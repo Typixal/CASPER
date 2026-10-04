@@ -1,6 +1,7 @@
 /**
- * Every page opens with a title and one plain sentence saying what the page
- * is for -- so a viewer who wandered in mid-demo is never lost.
+ * Page title plus one plain sentence on what the page is for.
+ * @param {object} props
+ * @param {string} props.title
  */
 export default function PageHeader({ title, children }) {
   return (

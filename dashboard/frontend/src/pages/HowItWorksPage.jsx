@@ -29,7 +29,7 @@ const STEPS = [
   },
 ]
 
-// What each term means, for the glossary. Keys match lib/terms.
+// Glossary definitions, keyed like lib/terms.
 const MEANING = {
   replicas: "Copies of the portal running at the same time. More copies = more visitors served at once.",
   p95: "Of every 100 page loads, how long the 5 slowest took. It shows the worst experience, not the average.",
@@ -49,6 +49,9 @@ const MEANING = {
   prediction: "Module B's output: how many servers, and from when until when.",
 }
 
+/**
+ * The problem, the four modules as four steps, and the glossary.
+ */
 export default function HowItWorksPage() {
   const rows = glossary().filter((g) => MEANING[g.key])
 
