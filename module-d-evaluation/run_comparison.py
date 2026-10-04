@@ -32,6 +32,7 @@ import traffic
 HERE = Path(__file__).resolve().parent
 RESULTS_DIR = HERE / "results"
 STRATEGIES = ("reactive", "predictive")
+REACTIVE_MAX = 6  # reactive_baseline.py's own default ceiling
 
 
 @dataclass
@@ -45,6 +46,12 @@ class Plan:
     @property
     def predictive_peak(self):
         return traffic.replicas_needed(self.peak_rps, self.per_replica_rps)
+
+    @property
+    def reactive_max(self):
+        """Never below what CASPER is allowed. Under heavy load a lower
+        ceiling would make reactive lose to its cap, not to reacting late."""
+        return max(REACTIVE_MAX, self.predictive_peak)
 
 
 def make_plan(peak_rps=250, per_replica_rps=4000 / 60, baseline_replicas=1, lead_s=20, warmup_s=5):
@@ -69,7 +76,9 @@ def describe(plan):
             "  peak load       : {} req/s".format(plan.peak_rps),
             "  per replica     : {:.1f} req/s (documented ~4000 req/min)".format(plan.per_replica_rps),
             "  baseline        : {} replica(s) at the start of every run".format(plan.baseline_replicas),
-            "  run 1 reactive  : scales on measured p95 latency, after the fact",
+            "  run 1 reactive  : scales on measured p95 latency, after the fact (up to {} replicas)".format(
+                plan.reactive_max
+            ),
             "  run 2 predictive: scales to {} replicas {}s before the ramp, from the calendar".format(
                 plan.predictive_peak, plan.lead_s
             ),
@@ -111,7 +120,7 @@ def run(env, plan, out_dir=RESULTS_DIR):
         summary_path = raw / "{}_summary.json".format(strategy)
         csv_path = raw / "{}.csv".format(strategy)
 
-        handle = env.start_strategy(strategy, prediction)
+        handle = env.start_strategy(strategy, prediction, plan.reactive_max)
         try:
             wait = (k6_start - env.now()).total_seconds()
             if wait > 0:
@@ -149,6 +158,11 @@ def run(env, plan, out_dir=RESULTS_DIR):
 # --- the live environment ----------------------------------------------------
 
 
+def reactive_command(python, max_replicas):
+    """Command line for the reactive scaler, with the plan's ceiling."""
+    return [str(python), str(HERE / "reactive_baseline.py"), "--max", str(max_replicas)]
+
+
 class RealEnvironment:
     """Docker via Module C's controller, the two scalers as processes, k6.exe."""
 
@@ -174,10 +188,10 @@ class RealEnvironment:
         print("[compare] resetting portal to {} replica(s)".format(replicas), flush=True)
         self._controller.scale_to(replicas, source="manual")
 
-    def start_strategy(self, name, prediction_path):
+    def start_strategy(self, name, prediction_path, max_replicas):
         log = (RESULTS_DIR / "raw" / "{}_scaler.log".format(name)).open("w", encoding="utf-8")
         if name == "reactive":
-            command = [sys.executable, str(HERE / "reactive_baseline.py")]
+            command = reactive_command(sys.executable, max_replicas)
             cwd = HERE
         else:
             python = self._module_c / ".venv" / "Scripts" / "python.exe"

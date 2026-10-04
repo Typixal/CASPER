@@ -28,6 +28,7 @@ class RecordingEnv:
         self.t = T0
         self.k6_fails_for = k6_fails_for
         self.predictions = {}
+        self.max_replicas = {}
 
     def now(self):
         return self.t
@@ -38,8 +39,9 @@ class RecordingEnv:
     def reset(self, replicas):
         self.calls.append(("reset", replicas))
 
-    def start_strategy(self, name, prediction_path):
+    def start_strategy(self, name, prediction_path, max_replicas):
         self.calls.append(("start", name))
+        self.max_replicas[name] = max_replicas
         if prediction_path is not None:
             self.predictions[name] = json.loads(Path(prediction_path).read_text(encoding="utf-8"))
         return name
@@ -119,6 +121,45 @@ def test_the_prediction_asks_for_enough_replicas_for_the_peak(tmp_path):
     rc.run(env, rc.make_plan(peak_rps=250, per_replica_rps=4000 / 60), tmp_path)
 
     assert env.predictions["predictive"]["predicted_peak_replicas"] == 4
+
+
+def test_the_reactive_ceiling_stays_at_six_for_the_default_load():
+    # 250 req/s needs 4 replicas; the reactive scaler keeps its usual
+    # ceiling of 6, so the committed results stay reproducible.
+    assert rc.make_plan(peak_rps=250).reactive_max == 6
+
+
+def test_the_reactive_ceiling_rises_to_match_casper_under_heavier_load():
+    # 500 req/s needs 8 replicas. Capping reactive at 6 while CASPER gets 8
+    # would make reactive lose because of its ceiling, not because it reacts
+    # late -- the experiment would prove nothing.
+    plan = rc.make_plan(peak_rps=500, per_replica_rps=4000 / 60)
+
+    assert plan.predictive_peak == 8
+    assert plan.reactive_max == 8
+
+
+def test_the_reactive_scaler_is_started_with_the_plans_ceiling(tmp_path):
+    env = RecordingEnv()
+    plan = rc.make_plan(peak_rps=500)
+
+    rc.run(env, plan, tmp_path)
+
+    assert env.max_replicas["reactive"] == plan.reactive_max
+
+
+def test_the_reactive_command_passes_the_ceiling_to_the_scaler():
+    command = rc.reactive_command("python.exe", 8)
+
+    assert command[-2:] == ["--max", "8"]
+    assert command[1].endswith("reactive_baseline.py")
+
+
+def test_dry_run_states_both_ceilings():
+    text = rc.describe(rc.make_plan(peak_rps=500))
+
+    assert "8 replicas" in text
+    assert "up to 8" in text
 
 
 def test_a_strategy_is_stopped_even_when_k6_fails(tmp_path):

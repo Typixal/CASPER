@@ -41,7 +41,12 @@ powershell -ExecutionPolicy Bypass -File tools\fetch_k6.ps1      # one time
 
 .\.venv\Scripts\python.exe run_comparison.py --dry-run           # see the plan
 .\.venv\Scripts\python.exe run_comparison.py                     # the real run
+.\.venv\Scripts\python.exe run_comparison.py --peak-rps 400      # heavier traffic
 ```
+
+From the repo root, `.\run-demo.ps1 -Compare -PeakRps 400` does the same with the
+whole stack, or run `.\run-demo.ps1` with no arguments and pick the load from
+the menu.
 
 The reactive scaler on its own, against a running stack:
 
@@ -73,6 +78,11 @@ Sized for a laptop: the peak needs **4 replicas** at the project's documented
 ~4000 req/min per replica. (Module B's estimates for the real events are 12–20
 replicas — the conversion is the same, only the magnitude is scaled down.)
 
+`--peak-rps` changes the peak (the other phases scale with it). Each replica
+serves ~67 req/s, so 400 req/s needs 6. Above about 400 req/s the laptop itself
+— k6, nginx and every container on one CPU — starts to be the bottleneck for
+both runs alike, and the launcher warns.
+
 ### Run 1 — the reactive baseline
 
 `reactive_baseline.py` is an **honest** stand-in for a conventional
@@ -84,7 +94,7 @@ nginx and takes the p95:
 | scale up | +2 replicas after **2 consecutive** probes with p95 > 400 ms |
 | scale down | −1 replica after **6 consecutive** probes with p95 < 150 ms |
 | cooldown | 15 s after any scale action — new replicas need time to pass healthchecks |
-| bounds | 1 – 6 replicas |
+| bounds | 1 – 6 replicas, raised to CASPER's planned count when that is higher |
 
 Every one of those guards is standard practice in real auto-scalers, not a
 handicap added to flatter CASPER. A failed probe (e.g. a 503 from a saturated
@@ -106,6 +116,9 @@ alone. 20 s covers the time new containers take to pass their healthcheck.
   scaler through `module_c.py`, which imports the real controller.
 - **Same start.** The portal is reset to 1 replica before each run.
 - **Same traffic.** One stages file, written once, used for both k6 runs.
+- **Same ceiling.** The reactive scaler may always go at least as high as
+  CASPER's plan. At heavy load, capping reactive at 6 while CASPER gets 8 would
+  make it lose to its cap rather than to reacting late.
 - **Real capacity.** Each portal replica serves at most 5 requests at once
   (queue 2 s, then 503) — see Module C. Without that cap, extra load barely
   moves latency and there would be nothing to compare.
@@ -171,7 +184,7 @@ six records, so it stays stdlib-only. Each module uses the tool its job needs.
 
 ## Tests
 
-Built test-first: **69 tests**, each written and watched fail before the code
+Built test-first: **74 tests**, each written and watched fail before the code
 that satisfies it. No mocks.
 
 ```powershell
@@ -206,7 +219,7 @@ module-d-evaluation/
 ├── charts.py              matplotlib charts for the report
 ├── module_c.py            bridge to Module C's real scale controller
 ├── tools/fetch_k6.ps1     downloads a pinned k6.exe into tools/ (nothing system-wide)
-├── tests/                 69 tests + real k6 fixtures
+├── tests/                 74 tests + real k6 fixtures
 ├── results/               output (raw/ is gitignored)
 └── requirements.txt       pandas, matplotlib, pytest (pyparsing pinned — see file)
 ```
